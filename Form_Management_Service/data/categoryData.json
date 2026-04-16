@@ -1,0 +1,399 @@
+{
+  "mainCategories": [
+    {
+      "name": "Energy & Utilities",
+      "icon": "Zap",
+      "subcategories": [
+        {
+          "name": "Solar",
+          "products": [
+            {
+              "name": "Residential"
+            },
+            {
+              "name": "Industrial"
+            },
+            {
+              "name": "Horizontal Axis"
+            },
+            {
+              "name": "Off-Grid Solar System"
+            },
+            {
+              "name": "Solar Inverter"
+            },
+            {
+              "name": "Grid Tied Solar System"
+            },
+            {
+              "name": "Hybrid Solar System"
+            },
+            {
+              "name": "Photovoltaic Power System"
+            }
+          ]
+        },
+        {
+          "name": "Wind",
+          "products": [
+            {
+              "name": "Commercial"
+            },
+            {
+              "name": "Offshore Wind"
+            },
+            {
+              "name": "Vertical Axis"
+            },
+            {
+              "name": "Utility Scale Wind"
+            },
+            {
+              "name": "Distributed Small Wind"
+            }
+          ]
+        },
+        {
+          "name": "Bio Gas",
+          "products": [
+            {
+              "name": "Industrial Digester Plants"
+            },
+            {
+              "name": "Small Scale Digester"
+            },
+            {
+              "name": "Dry Fermentation Plants"
+            }
+          ]
+        },
+        {
+          "name": "Hydrogen",
+          "products": [
+            {
+              "name": "Gray Hydrogen"
+            },
+            {
+              "name": "Green Hydrogen"
+            },
+            {
+              "name": "Blue Hydrogen"
+            },
+            {
+              "name": "Yellow Hydrogen"
+            }
+          ]
+        },
+        {
+          "name": "Oil & Gas",
+          "products": [
+            {
+              "name": "Exploration & Production"
+            },
+            {
+              "name": "Pipeline"
+            },
+            {
+              "name": "CGD"
+            },
+            {
+              "name": "Refinery"
+            }
+          ]
+        },
+        {
+          "name": "Power",
+          "products": [
+            {
+              "name": "Thermal Power Generation"
+            },
+            {
+              "name": "On grid Transmission"
+            },
+            {
+              "name": "Off grid Transmission"
+            },
+            {
+              "name": "11KV Distribution"
+            }
+          ]
+        },
+        {
+          "name": "Chemicals",
+          "products": [
+            {
+              "name": "Propylene"
+            },
+            {
+              "name": "Benzene"
+            },
+            {
+              "name": "Propylene"
+            },
+            {
+              "name": "Ethylene"
+            },
+            {
+              "name": "Toluene"
+            },
+            {
+              "name": "Xylene"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Industrial & MSME",
+      "icon": "Truck",
+      "subcategories": [
+        {
+          "name": "Fabrication",
+          "products": [
+            {
+              "name": "Foundry & Casting Units"
+            },
+            {
+              "name": "Tool, Die & Mould Manufacturing"
+            },
+            {
+              "name": "Sheet Metal & Fabricated"
+            },
+            {
+              "name": "Industrial Machinery & Equipment"
+            }
+          ]
+        },
+        {
+          "name": "Textiles",
+          "products": [
+            {
+              "name": "Fabrics"
+            },
+            {
+              "name": "Textile Processing & Dyeing"
+            },
+            {
+              "name": "Jute & Cotton Processing"
+            },
+            {
+              "name": "Garment & Apparel Manufacturing"
+            },
+            {
+              "name": "Handloom & Power Loom"
+            }
+          ]
+        },
+        {
+          "name": "Plastic & Rubber",
+          "products": [
+            {
+              "name": "Plastic Molding"
+            },
+            {
+              "name": "PVC Pipe & Fittings Manufacturing"
+            },
+            {
+              "name": "Injection Molding"
+            },
+            {
+              "name": "Adhesives & Sealants"
+            },
+            {
+              "name": "Plastic Packaging Materials"
+            }
+          ]
+        },
+        {
+          "name": "Paper & Packaging",
+          "products": [
+            {
+              "name": "Paper Bags & Eco-friendly Packaging"
+            },
+            {
+              "name": "Corrugated Box & Carton Manufacturing"
+            },
+            {
+              "name": "Printing & Stationery Products"
+            },
+            {
+              "name": "Labels & Stickers Manufacturing"
+            }
+          ]
+        },
+        {
+          "name": "Automobiles",
+          "products": [
+            {
+              "name": "Engine & Powertrain"
+            },
+            {
+              "name": "Transmission & Drivetrain"
+            },
+            {
+              "name": "Electrical & Electronics"
+            },
+            {
+              "name": "Suspension & Steering"
+            },
+            {
+              "name": "Body & Chassis"
+            },
+            {
+              "name": "Braking System"
+            },
+            {
+              "name": "Wheels & Tyres"
+            }
+          ]
+        },
+        {
+          "name": "Handicrafts",
+          "products": [
+            {
+              "name": "Metallic"
+            },
+            {
+              "name": "Natural"
+            },
+            {
+              "name": "Organic & Recycled"
+            },
+            {
+              "name": "Textile & Fabrics"
+            }
+          ]
+        },
+        {
+          "name": "Electronics",
+          "products": [
+            {
+              "name": "Semiconductors & Microelectronics"
+            },
+            {
+              "name": "Power & Energy"
+            },
+            {
+              "name": "Display & Input Devices"
+            },
+            {
+              "name": "Connectivity & Communications"
+            },
+            {
+              "name": "Embedded & Automation Systems"
+            },
+            {
+              "name": "Safety & Security"
+            },
+            {
+              "name": "Testing & Quality"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Infrastructure",
+      "icon": "Shield",
+      "subcategories": [
+        {
+          "name": "Water Infrastructure",
+          "products": [
+            {
+              "name": "Common Effluent Treatment Plant(CETP)"
+            },
+            {
+              "name": "Membrane Bioreactor(MBR) Plants"
+            },
+            {
+              "name": "Sequencing Batch Reactor(SBR) Plants"
+            },
+            {
+              "name": "Reverse Osmosis(RO) Treatment Plants"
+            },
+            {
+              "name": "Sewage Treatment Plants(STP)"
+            },
+            {
+              "name": "Effluent Treatment Plants(ETP)"
+            },
+            {
+              "name": "Activated Sludge Process(ASP) Plants"
+            },
+            {
+              "name": "Moving Bed Biofilm Reactor(MBBR) Plants"
+            },
+            {
+              "name": "Zero Liquid Discharge(ZLD) Plants"
+            },
+            {
+              "name": "Constructed Wetlands(Natural Treatment Systems)"
+            }
+          ]
+        },
+        {
+          "name": "Desalination Plants",
+          "products": [
+            {
+              "name": "Multi-Stage Flash Distillation(MSF)"
+            },
+            {
+              "name": "Electrodialysis(ED) & Electrodialysis Reversal(EDR)"
+            },
+            {
+              "name": "Multi-Effect Distillation(MED)"
+            },
+            {
+              "name": "Vapor Compression Distillation(VCD)"
+            },
+            {
+              "name": "Hybrid Desalination Plants"
+            },
+            {
+              "name": "Reverse Osmosis(RO) Desalination"
+            }
+          ]
+        },
+        {
+          "name": "Water Distribuition System",
+          "products": [
+            {
+              "name": "Pipelines & Transmission"
+            },
+            {
+              "name": "Pumping Stations"
+            },
+            {
+              "name": "Valves & Hydrants"
+            }
+          ]
+        },
+        {
+          "name": "Irrigation Systems",
+          "products": [
+            {
+              "name": "Drip Irrigation(Micro-Irrigation)"
+            },
+            {
+              "name": "Sprinkler System"
+            },
+            {
+              "name": "Lift Irrigation"
+            },
+            {
+              "name": "Subsurface Irrigation"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "uncategorized": [
+    {
+      "name": "jay_edit"
+    },
+    {
+      "name": "temp"
+    }
+  ]
+}

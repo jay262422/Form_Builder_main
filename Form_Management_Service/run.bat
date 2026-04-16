@@ -1,0 +1,3 @@
+@echo off
+echo Starting Form Management Service...
+npm start 

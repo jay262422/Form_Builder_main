@@ -1,0 +1,282 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Form System Global Styles */
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Animation Classes */
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.2s ease-out;
+}
+
+/* Form Field Improvements */
+.form-field {
+  transition: all 0.2s ease;
+}
+
+.form-field:hover {
+  transform: translateY(-1px);
+}
+
+/* Button Improvements */
+.btn-primary {
+  @apply px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200;
+}
+
+.btn-secondary {
+  @apply px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-200;
+}
+
+.btn-success {
+  @apply px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all duration-200;
+}
+
+.btn-danger {
+  @apply px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200;
+}
+
+/* Loading States */
+.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Focus States */
+.form-input:focus {
+  @apply ring-2 ring-blue-500 border-blue-500;
+  outline: none;
+}
+
+/* Error States */
+.form-input.error {
+  @apply border-red-500 ring-red-500;
+}
+
+/* Success States */
+.form-input.success {
+  @apply border-green-500 ring-green-500;
+}
+
+/* Accessibility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Keyboard Navigation */
+.focus-visible:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Toast Animations */
+.toast-enter {
+  opacity: 0;
+  transform: translateX(100%);
+}
+
+.toast-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: all 0.3s ease-out;
+}
+
+.toast-exit {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.toast-exit-active {
+  opacity: 0;
+  transform: translateX(100%);
+  transition: all 0.3s ease-in;
+}
+
+/* Drag and Drop */
+.dragging {
+  opacity: 0.5;
+  transform: rotate(5deg);
+}
+
+.drop-zone {
+  transition: all 0.2s ease;
+}
+
+.drop-zone.drag-over {
+  @apply bg-blue-50 border-blue-300;
+  transform: scale(1.02);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .form-sidebar {
+    order: 2;
+  }
+  
+  .form-main {
+    order: 1;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .print-only {
+    display: block !important;
+  }
+} 
+
+/* Contact Form Layout Styles */
+.contact-form-section {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.contact-form-layout {
+  width: 100%;
+}
+
+.contact-form-field {
+  margin-bottom: 1rem;
+}
+
+.contact-form-field input,
+.contact-form-field textarea {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #d1d5db;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+}
+
+.contact-form-field input:focus,
+.contact-form-field textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.contact-form-field input.error,
+.contact-form-field textarea.error {
+  border-color: #ef4444;
+}
+
+.contact-form-field .error-message {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: #ef4444;
+}
+
+.contact-form-field label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.contact-form-field label.required::after {
+  content: " *";
+  color: #ef4444;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .contact-form-layout .flex.flex-wrap .w-full[class*="sm:w-1/2"] {
+    width: 100% !important;
+  }
+}
+
+/* Form Builder Submit Button Styles */
+.dynamic-form-builder .form-actions {
+  margin-top: 2rem;
+}
+
+.dynamic-form-builder .form-actions button[type="submit"] {
+  padding: 0.75rem 2rem;
+  background-color: #2563eb;
+  color: white;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.dynamic-form-builder .form-actions button[type="submit"]:hover {
+  background-color: #1d4ed8;
+}
+
+.dynamic-form-builder .form-actions button[type="submit"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Hide section titles and descriptions for contact layout */
+.contact-form-section .section-header {
+  display: none;
+}
+
+/* Ensure proper spacing */
+.contact-form-layout .w-full.px-2.mb-4:last-child {
+  margin-bottom: 0;
+} 

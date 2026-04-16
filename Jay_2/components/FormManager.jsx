@@ -1,0 +1,1599 @@
+import React, { useState, useEffect } from 'react';
+import fileFormManager from '../services/fileFormManager';
+import ThemeEditor from './editors/ThemeEditor';
+
+/**
+ * FormManager - Component for managing saved forms
+ * Allows viewing, editing, deleting, and managing forms
+ */
+export default function FormManager({
+  onEditForm,
+  onViewForm,
+  onCreateForm,
+  className = ""
+}) {
+  const [forms, setForms] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState('all'); // all, templates, custom
+  const [selectedForm, setSelectedForm] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showThemeEditor, setShowThemeEditor] = useState(false);
+  const [selectedFormForTheme, setSelectedFormForTheme] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [editingName, setEditingName] = useState('');
+  const [editingDescription, setEditingDescription] = useState('');
+  const [isEditingMetadata, setIsEditingMetadata] = useState(false);
+  
+  // Settings editing state - store changes locally until save
+  const [pendingSettings, setPendingSettings] = useState(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [formVersions, setFormVersions] = useState([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [restoringVersion, setRestoringVersion] = useState(false);
+
+  // Load forms on component mount
+  useEffect(() => {
+    loadForms();
+  }, []); // loadForms is stable, no need to add to dependencies
+
+  // Load forms from storage
+  const loadForms = async () => {
+    setLoading(true);
+    try {
+      console.log('🔍 FormManager: Loading forms...');
+      const allForms = await fileFormManager.getAllFormsWithExamples();
+      console.log('🔍 FormManager: Loaded forms:', allForms);
+      
+      // Check for forms with conditional logic
+      allForms.forEach(form => {
+        if (form.schema?.sections) {
+          form.schema.sections.forEach((section, sectionIndex) => {
+            if (section.condition) {
+              console.log(`🔍 FormManager: Form "${form.name}" has section condition:`, {
+                sectionTitle: section.title,
+                condition: section.condition
+              });
+            }
+            
+            if (section.fields) {
+              section.fields.forEach((field, fieldIndex) => {
+                if (field.condition) {
+                  console.log(`🔍 FormManager: Form "${form.name}" has field condition:`, {
+                    sectionTitle: section.title,
+                    fieldName: field.name,
+                    condition: field.condition
+                  });
+                }
+              });
+            }
+          });
+        }
+      });
+      
+      setForms(allForms);
+    } catch (error) {
+      console.error('Error loading forms:', error);
+      // Set empty array to prevent undefined errors
+      setForms([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Filter forms based on search and type
+  const filteredForms = forms.filter(form => {
+    const matchesSearch = form.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         (form.description && form.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    const matchesType = filterType === 'all' || 
+                       (filterType === 'templates' && form.status?.isTemplate) ||
+                       (filterType === 'custom' && !form.status?.isTemplate) ||
+                       (filterType === 'published' && form.status?.isPublished) ||
+                       (filterType === 'draft' && !form.status?.isPublished);
+    
+    return matchesSearch && matchesType;
+  });
+
+  // Handle form deletion
+  const handleDeleteForm = async (formId) => {
+    try {
+      await fileFormManager.deleteForm(formId);
+      loadForms();
+      setShowDeleteConfirm(false);
+      setSelectedForm(null);
+    } catch (error) {
+      // Error feedback handled by parent
+      throw error;
+    }
+  };
+
+  // Handle form duplication
+  const handleDuplicateForm = async (formId) => {
+    try {
+      // Use the dedicated duplicate method
+      await fileFormManager.duplicateForm(formId);
+      loadForms();
+    } catch (error) {
+      // Error feedback handled by parent
+      throw error;
+    }
+  };
+
+  // Handle creating from template
+  const handleCreateFromTemplate = async (templateId) => {
+    try {
+      // Get the full template data (with schema) before creating
+      const fullTemplateData = await fileFormManager.getFormByCustomId(templateId);
+      
+      // Create new form from template
+      const newForm = await fileFormManager.saveForm({
+        ...fullTemplateData,
+        id: null, // Will be generated by the API
+        name: `New ${fullTemplateData.name}`,
+        status: { ...fullTemplateData.status, isTemplate: false },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      
+      loadForms();
+    } catch (error) {
+      // Error feedback handled by parent
+      throw error;
+    }
+  };
+
+  // Handle opening settings modal
+  const handleOpenSettings = (form) => {
+    setSelectedForm(form);
+    setEditingName(form.name || '');
+    setEditingDescription(form.description || '');
+    setIsEditingMetadata(false);
+    setPendingSettings(form.settings || {});
+    setHasUnsavedChanges(false);
+    setShowSettingsModal(true);
+    loadFormVersions(form.id);
+  };
+
+  const loadFormVersions = async (formId) => {
+    setLoadingVersions(true);
+    try {
+      const versions = await fileFormManager.getFormVersions(formId);
+      setFormVersions(versions || []);
+    } catch (error) {
+      console.error('Error loading form versions:', error);
+      setFormVersions([]);
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+
+  const handleRestoreVersion = async (versionNumber) => {
+    if (!selectedForm) return;
+
+    setRestoringVersion(true);
+    try {
+      const restoredForm = await fileFormManager.restoreFormVersion(selectedForm.id, versionNumber);
+      if (restoredForm) {
+        setSelectedForm(restoredForm);
+      }
+      await loadForms();
+      await loadFormVersions(selectedForm.id);
+    } catch (error) {
+      console.error('Error restoring form version:', error);
+    } finally {
+      setRestoringVersion(false);
+    }
+  };
+
+  // Handle saving metadata changes
+  const handleSaveMetadata = async () => {
+    if (!selectedForm) return;
+    
+    try {
+      const updates = {
+        name: editingName.trim(),
+        description: editingDescription.trim()
+      };
+      
+      // Update local state immediately for better UX
+      setSelectedForm({
+        ...selectedForm,
+        ...updates
+      });
+      
+      // Update in forms list
+      setForms(prevForms => 
+        prevForms.map(form => 
+          form.id === selectedForm.id 
+            ? { ...form, ...updates }
+            : form
+        )
+      );
+      
+      // Save to backend
+      await fileFormManager.updateForm(selectedForm.id, updates);
+      setIsEditingMetadata(false);
+    } catch (error) {
+      console.error('Error updating form metadata:', error);
+      // Revert on error
+      loadForms();
+    }
+  };
+
+  // Handle closing settings modal
+  const handleCloseSettings = () => {
+    setShowSettingsModal(false);
+    setSelectedForm(null);
+    setIsEditingMetadata(false);
+    setEditingName('');
+    setEditingDescription('');
+    setPendingSettings(null);
+    setHasUnsavedChanges(false);
+    setFormVersions([]);
+  };
+
+  // Handle saving all settings changes
+  const handleSaveAllSettings = async () => {
+    if (!selectedForm || !hasUnsavedChanges) return;
+    
+    try {
+      // Save metadata changes
+      if (editingName.trim() !== selectedForm.name || editingDescription !== selectedForm.description) {
+        const metadataUpdates = {
+          name: editingName.trim(),
+          description: editingDescription.trim()
+        };
+        
+        // Update local state immediately for better UX
+        setSelectedForm({
+          ...selectedForm,
+          ...metadataUpdates
+        });
+        
+        // Update in forms list
+        setForms(prevForms => 
+          prevForms.map(form => 
+            form.id === selectedForm.id 
+              ? { ...form, ...metadataUpdates }
+              : form
+          )
+        );
+        
+        // Save to backend
+        await fileFormManager.updateForm(selectedForm.id, metadataUpdates);
+      }
+
+      // Save status changes - we need to track original status to compare
+      // For now, we'll save status changes if they exist
+      if (selectedForm.status) {
+        // Update in forms list
+        setForms(prevForms => 
+          prevForms.map(form => 
+            form.id === selectedForm.id 
+              ? { ...form, status: selectedForm.status }
+              : form
+          )
+        );
+        
+        // Save to backend
+        await fileFormManager.updateForm(selectedForm.id, {
+          status: selectedForm.status
+        });
+      }
+
+      // Save settings changes
+      if (pendingSettings && JSON.stringify(pendingSettings) !== JSON.stringify(selectedForm.settings)) {
+        // Update local state immediately for better UX
+        setSelectedForm({
+          ...selectedForm,
+          settings: pendingSettings
+        });
+        
+        // Update in forms list
+        setForms(prevForms => 
+          prevForms.map(form => 
+            form.id === selectedForm.id 
+              ? { ...form, settings: pendingSettings }
+              : form
+          )
+        );
+        
+        // Save to backend
+        await fileFormManager.updateForm(selectedForm.id, {
+          settings: pendingSettings
+        });
+      }
+
+      setHasUnsavedChanges(false);
+      setIsEditingMetadata(false);
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      // Revert on error
+      loadForms();
+    }
+  };
+
+  // Helper function to update pending settings
+  const updatePendingSettings = (updates) => {
+    setPendingSettings(prev => ({
+      ...prev,
+      ...updates
+    }));
+    setHasUnsavedChanges(true);
+  };
+
+  // Handle export forms
+  const handleExportForms = () => {
+    try {
+      const formsToExport = forms.filter(f => !f.status?.isTemplate);
+      const dataStr = JSON.stringify(formsToExport, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(dataBlob);
+      link.download = `dynamic_forms_${new Date().toISOString().split('T')[0]}.json`;
+      link.click();
+    } catch (error) {
+      // Error feedback handled by parent
+      throw error;
+    }
+  };
+
+  // Handle import forms
+  const handleImportForms = async (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      try {
+        const text = await file.text();
+        const importedForms = JSON.parse(text);
+        
+        if (!Array.isArray(importedForms)) {
+          throw new Error('Invalid file format');
+        }
+        
+        for (const form of importedForms) {
+          await fileFormManager.saveForm({
+            ...form,
+            id: null // Generate new ID
+          });
+        }
+        
+        loadForms();
+        // Success feedback handled by parent
+      } catch (error) {
+        // Error feedback handled by parent
+        throw error;
+      }
+    }
+  };
+
+  // Format date
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  // Get form stats
+  const stats = {
+    totalItems: forms.length,
+    totalTemplates: forms.filter(f => f.status?.isTemplate).length,
+    totalForms: forms.filter(f => !f.status?.isTemplate).length,
+    recentlyCreated: forms
+      .filter(f => !f.status?.isTemplate)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 5)
+  };
+
+  return (
+    <div className={`form-manager h-full flex flex-col ${className}`}>
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Form Manager</h2>
+            <p className="text-gray-600 mt-1">Manage your created forms and templates</p>
+          </div>
+          <div className="flex space-x-3">
+            {onCreateForm && (
+              <button
+                onClick={onCreateForm}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+              >
+                <span>➕</span>
+                <span>Create New Form</span>
+              </button>
+            )}
+            <label className="cursor-pointer px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2">
+              <span>📥</span>
+              <span>Import Forms</span>
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleImportForms}
+                className="hidden"
+              />
+            </label>
+            <button
+              onClick={handleExportForms}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
+            >
+              <span>📤</span>
+              <span>Export Forms</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+        <div className="grid grid-cols-4 gap-4">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-gray-900">{stats.totalItems}</div>
+            <div className="text-sm text-gray-600">Total Forms</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-blue-600">{stats.totalTemplates}</div>
+            <div className="text-sm text-gray-600">Templates</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-green-600">{stats.totalForms}</div>
+            <div className="text-sm text-gray-600">Custom Forms</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-purple-600">{filteredForms.length}</div>
+            <div className="text-sm text-gray-600">Filtered</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters and Search */}
+      <div className="bg-white px-6 py-4 border-b border-gray-200">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="Search forms..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div className="flex space-x-2">
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="all">All Forms</option>
+              <option value="templates">Templates Only</option>
+              <option value="custom">Custom Forms Only</option>
+              <option value="published">Published Only</option>
+              <option value="draft">Draft Only</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Forms List */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-gray-500">Loading forms...</div>
+          </div>
+        ) : filteredForms.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-6xl mb-4">📝</div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No forms found</h3>
+            <p className="text-gray-600">Try adjusting your search or filters</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6 pb-8">
+            {filteredForms.map((form, index) => (
+              <div
+                key={form.id || `form-${index}`}
+                className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+              >
+                                 {/* Form Header */}
+                 <div className="p-4 border-b border-gray-200">
+                   <div className="flex items-start justify-between">
+                     <div className="flex-1">
+                                              <div className="flex items-center space-x-2 mb-2">
+                         <h3 className="text-lg font-semibold text-gray-900">{form.name}</h3>
+                          {form.status?.isTemplate && (
+                            <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">
+                              Template
+                            </span>
+                          )}
+                          {(form.formType === 'wizard' || form.schema?.formType === 'wizard') && (
+                            <span className="px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded-full">
+                              Step-by-Step
+                            </span>
+                          )}
+                        </div>
+                       {form.description && (
+                         <p className="text-sm text-gray-600">{form.description}</p>
+                       )}
+                     </div>
+                     {/* Settings Gear Icon */}
+                     <button
+                       onClick={() => handleOpenSettings(form)}
+                       className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                       title="Form Settings"
+                     >
+                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                       </svg>
+                     </button>
+                   </div>
+                 </div>
+
+                {/* Form Details */}
+                <div className="p-4">
+                  <div className="space-y-2 text-sm text-gray-600">
+                    <div className="flex justify-between">
+                      <span>Sections:</span>
+                      <span className="font-medium">
+                        {form.sectionsCount || 0}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Fields:</span>
+                      <span className="font-medium">
+                        {form.fieldsCount || 0}
+                      </span>
+                    </div>
+                    {!form.status?.isTemplate && (
+                      <div className="flex justify-between">
+                        <span>Created:</span>
+                        <span className="font-medium">{formatDate(form.createdAt)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {form.status?.isTemplate ? (
+                      <>
+                        <button
+                          onClick={() => handleCreateFromTemplate(form.id)}
+                          className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                        >
+                          Use Template
+                        </button>
+                        <button
+                          onClick={() => onEditForm?.(form)}
+                          className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                        >
+                          Edit Template
+                        </button>
+                        <button
+                          onClick={() => onViewForm?.(form)}
+                          className="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+                        >
+                          Preview
+                        </button>
+                        <button
+                          onClick={async () => {
+                            try {
+                              // Fetch full form data via API just like Edit button
+                              const fullForm = await fileFormManager.getFormByCustomId(form.id);
+                              setSelectedFormForTheme(fullForm);
+                              setShowThemeEditor(true);
+                            } catch (error) {
+                              console.error('Error loading full form data for theme editing:', error);
+                              // Fallback to current form data if API fails
+                              const formWithUI = {
+                                ...form,
+                                ui_part: form.ui_part || {
+                                  themeId: 'default',
+                                  layout: {},
+                                  sectionStyle: 'card',
+                                  removeSectionBoxes: false
+                                }
+                              };
+                              setSelectedFormForTheme(formWithUI);
+                              setShowThemeEditor(true);
+                            }
+                          }}
+                          className="px-3 py-1 text-sm bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors"
+                        >
+                          🎨 Theme
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => onEditForm?.(form)}
+                          className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => onViewForm?.(form)}
+                          className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                        >
+                          Preview
+                        </button>
+                        <button
+                          onClick={async () => {
+                            try {
+                              // Fetch full form data via API just like Edit button
+                              const fullForm = await fileFormManager.getFormByCustomId(form.id);
+                              setSelectedFormForTheme(fullForm);
+                              setShowThemeEditor(true);
+                            } catch (error) {
+                              console.error('Error loading full form data for theme editing:', error);
+                              // Fallback to current form data if API fails
+                              const formWithUI = {
+                                ...form,
+                                ui_part: form.ui_part || {
+                                  themeId: 'default',
+                                  layout: {},
+                                  sectionStyle: 'card',
+                                  removeSectionBoxes: false
+                                }
+                              };
+                              setSelectedFormForTheme(formWithUI);
+                              setShowThemeEditor(true);
+                            }
+                          }}
+                          className="px-3 py-1 text-sm bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors"
+                        >
+                          🎨 Theme
+                        </button>
+                        <button
+                          onClick={() => handleDuplicateForm(form.id)}
+                          className="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+                        >
+                          Duplicate
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedForm(form);
+                            setShowDeleteConfirm(true);
+                          }}
+                          className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+             {/* Delete Confirmation Modal */}
+       {showDeleteConfirm && selectedForm && (
+         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+           <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+             <div className="px-6 py-4 border-b border-gray-200">
+               <h3 className="text-lg font-semibold text-gray-900">Delete Form</h3>
+             </div>
+             <div className="px-6 py-4">
+               <p className="text-gray-600 mb-4">
+                 Are you sure you want to delete "{selectedForm.name}"? This action cannot be undone.
+               </p>
+               <div className="flex justify-end space-x-3">
+                 <button
+                   onClick={() => setShowDeleteConfirm(false)}
+                   className="px-4 py-2 text-sm bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                 >
+                   Cancel
+                 </button>
+                 <button
+                   onClick={() => handleDeleteForm(selectedForm.id)}
+                   className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+                 >
+                   Delete
+                 </button>
+               </div>
+             </div>
+           </div>
+         </div>
+       )}
+
+       {/* Form Settings Modal */}
+       {showSettingsModal && selectedForm && (
+         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                           <div className="px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Form Settings - {isEditingMetadata ? editingName : selectedForm.name}
+                  </h3>
+                  {hasUnsavedChanges && (
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={handleCloseSettings}
+                        className="px-3 py-1 text-sm bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveAllSettings}
+                        className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                      >
+                        Save Changes
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+             <div className="px-6 py-4">
+               <div className="space-y-6">
+                 {/* Form Name and Description */}
+                 <div>
+                   <div className="flex items-center justify-between mb-3">
+                     <h4 className="text-md font-medium text-gray-900">Form Information</h4>
+                     <button
+                       onClick={() => setIsEditingMetadata(!isEditingMetadata)}
+                       className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                     >
+                       {isEditingMetadata ? 'Cancel Edit' : 'Edit'}
+                     </button>
+                   </div>
+                   
+                   {isEditingMetadata ? (
+                     <div className="space-y-4">
+                       <div>
+                         <label className="block text-sm font-medium text-gray-700 mb-2">
+                           Form Name *
+                         </label>
+                         <input
+                           type="text"
+                           value={editingName}
+                           onChange={(e) => setEditingName(e.target.value)}
+                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="Enter form name"
+                         />
+                       </div>
+                       <div>
+                         <label className="block text-sm font-medium text-gray-700 mb-2">
+                           Description
+                         </label>
+                         <textarea
+                           value={editingDescription}
+                           onChange={(e) => setEditingDescription(e.target.value)}
+                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="Enter form description (optional)"
+                           rows={3}
+                         />
+                       </div>
+                                               <div className="flex justify-end space-x-3">
+                          <button
+                            onClick={() => {
+                              setIsEditingMetadata(false);
+                              setEditingName(selectedForm.name || '');
+                              setEditingDescription(selectedForm.description || '');
+                            }}
+                            className="px-4 py-2 text-sm bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsEditingMetadata(false);
+                              setHasUnsavedChanges(true);
+                            }}
+                            disabled={!editingName.trim()}
+                            className="px-4 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Done
+                          </button>
+                        </div>
+                     </div>
+                   ) : (
+                     <div className="space-y-2">
+                       <div>
+                         <span className="text-sm font-medium text-gray-700">Name:</span>
+                         <p className="text-sm text-gray-900">{selectedForm.name || 'No name set'}</p>
+                       </div>
+                       <div>
+                         <span className="text-sm font-medium text-gray-700">Description:</span>
+                         <p className="text-sm text-gray-900">{selectedForm.description || 'No description set'}</p>
+                       </div>
+                     </div>
+                   )}
+                 </div>
+
+                 {/* Form Status */}
+                 <div>
+                   <h4 className="text-md font-medium text-gray-900 mb-3">Form Status</h4>
+                   <div className="space-y-3">
+                                           <label className="flex items-center space-x-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedForm.status?.isPublished || false}
+                          onChange={(e) => {
+                            const newStatus = {
+                              ...selectedForm.status,
+                              isPublished: e.target.checked
+                            };
+                            setSelectedForm({
+                              ...selectedForm,
+                              status: newStatus
+                            });
+                            setHasUnsavedChanges(true);
+                          }}
+                          className="w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2"
+                        />
+                        <span className="text-sm text-gray-700">Published (Form is live and accessible)</span>
+                      </label>
+                      <label className="flex items-center space-x-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedForm.status?.isTemplate || false}
+                          onChange={(e) => {
+                            const newStatus = {
+                              ...selectedForm.status,
+                              isTemplate: e.target.checked
+                            };
+                            setSelectedForm({
+                              ...selectedForm,
+                              status: newStatus
+                            });
+                            setHasUnsavedChanges(true);
+                          }}
+                          className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                        />
+                        <span className="text-sm text-gray-700">Template (Can be used as a starting point for new forms)</span>
+                      </label>
+                   </div>
+                 </div>
+
+                 {/* Form Settings */}
+                 <div>
+                   <h4 className="text-md font-medium text-gray-900 mb-3">Form Behavior</h4>
+                   <div className="space-y-4">
+                     <label className="flex items-center space-x-3 cursor-pointer">
+                                               <input
+                          type="checkbox"
+                          checked={pendingSettings?.allowMultipleSubmissions || false}
+                          onChange={(e) => {
+                            updatePendingSettings({
+                              allowMultipleSubmissions: e.target.checked
+                            });
+                          }}
+                         className="w-5 h-5 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
+                       />
+                       <span className="text-sm text-gray-700">Allow multiple submissions from same user</span>
+                     </label>
+                                           <label className="flex items-center space-x-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={pendingSettings?.requireAuthentication || false}
+                          onChange={(e) => {
+                            updatePendingSettings({
+                              requireAuthentication: e.target.checked
+                            });
+                          }}
+                          className="w-5 h-5 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 focus:ring-2"
+                        />
+                        <span className="text-sm text-gray-700">Require user authentication to submit</span>
+                      </label>
+                   </div>
+                 </div>
+
+                 {/* Button Configuration */}
+                 <div>
+                   <h4 className="text-md font-medium text-gray-900 mb-3">Button Configuration</h4>
+                   <div className="space-y-4">
+                     {/* Submit Button Settings */}
+                     <div className="border border-gray-200 rounded-lg p-4">
+                       <h5 className="text-sm font-medium text-gray-900 mb-3">Submit Button</h5>
+                       <div className="space-y-3">
+                         <div>
+                           <label className="block text-sm font-medium text-gray-700 mb-1">Button Text</label>
+                                                       <input
+                              type="text"
+                              value={pendingSettings?.buttons?.submit?.text || 'Submit'}
+                              onChange={(e) => {
+                                const currentButtons = pendingSettings?.buttons || {};
+                                updatePendingSettings({
+                                  buttons: {
+                                    ...currentButtons,
+                                    submit: {
+                                      ...currentButtons.submit,
+                                      text: e.target.value
+                                    }
+                                  }
+                                });
+                              }}
+                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                             placeholder="Submit"
+                           />
+                         </div>
+                         <div>
+                           <label className="block text-sm font-medium text-gray-700 mb-1">Custom API Endpoint (optional)</label>
+                                                       <input
+                              type="text"
+                              value={pendingSettings?.buttons?.submit?.customApiEndpoint || ''}
+                              onChange={(e) => {
+                                const currentButtons = pendingSettings?.buttons || {};
+                                updatePendingSettings({
+                                  buttons: {
+                                    ...currentButtons,
+                                    submit: {
+                                      ...currentButtons.submit,
+                                      customApiEndpoint: e.target.value || null
+                                    }
+                                  }
+                                });
+                              }}
+                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                             placeholder="https://api.example.com/submit (leave empty for default)"
+                           />
+                           <p className="text-xs text-gray-500 mt-1">
+                             Leave empty to use the default form submission endpoint
+                           </p>
+                         </div>
+                       </div>
+                     </div>
+
+                     {/* Reset Button Settings */}
+                     <div className="border border-gray-200 rounded-lg p-4">
+                       <h5 className="text-sm font-medium text-gray-900 mb-3">Reset Button</h5>
+                       <div className="space-y-3">
+                         <label className="flex items-center space-x-3 cursor-pointer">
+                                                       <input
+                              type="checkbox"
+                              checked={pendingSettings?.buttons?.reset?.show !== false}
+                              onChange={(e) => {
+                                const currentButtons = pendingSettings?.buttons || {};
+                                updatePendingSettings({
+                                  buttons: {
+                                    ...currentButtons,
+                                    reset: {
+                                      ...currentButtons.reset,
+                                      show: e.target.checked
+                                    }
+                                  }
+                                });
+                              }}
+                             className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                           />
+                           <span className="text-sm text-gray-700">Show reset button</span>
+                         </label>
+                                                   {pendingSettings?.buttons?.reset?.show !== false && (
+                           <div>
+                             <label className="block text-sm font-medium text-gray-700 mb-1">Reset Button Text</label>
+                                                           <input
+                                type="text"
+                                value={pendingSettings?.buttons?.reset?.text || 'Reset'}
+                                onChange={(e) => {
+                                  const currentButtons = pendingSettings?.buttons || {};
+                                  updatePendingSettings({
+                                    buttons: {
+                                      ...currentButtons,
+                                      reset: {
+                                        ...currentButtons.reset,
+                                        text: e.target.value
+                                      }
+                                    }
+                                  });
+                                }}
+                               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="Reset"
+                             />
+                           </div>
+                         )}
+                       </div>
+                     </div>
+
+                                           {/* Cancel Button Settings */}
+                      <div className="border border-gray-200 rounded-lg p-4">
+                        <h5 className="text-sm font-medium text-gray-900 mb-3">Cancel Button</h5>
+                        <div className="space-y-3">
+                          <label className="flex items-center space-x-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={pendingSettings?.buttons?.cancel?.show !== false}
+                              onChange={(e) => {
+                                const currentButtons = pendingSettings?.buttons || {};
+                                updatePendingSettings({
+                                  buttons: {
+                                    ...currentButtons,
+                                    cancel: {
+                                      ...currentButtons.cancel,
+                                      show: e.target.checked
+                                    }
+                                  }
+                                });
+                              }}
+                              className="w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2"
+                            />
+                            <span className="text-sm text-gray-700">Show cancel button</span>
+                          </label>
+                          {pendingSettings?.buttons?.cancel?.show !== false && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Cancel Button Text</label>
+                              <input
+                                type="text"
+                                value={pendingSettings?.buttons?.cancel?.text || 'Cancel'}
+                                onChange={(e) => {
+                                  const currentButtons = pendingSettings?.buttons || {};
+                                  updatePendingSettings({
+                                    buttons: {
+                                      ...currentButtons,
+                                      cancel: {
+                                        ...currentButtons.cancel,
+                                        text: e.target.value
+                                      }
+                                    }
+                                  });
+                                }}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="Cancel"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                   </div>
+                 </div>
+
+                 {/* Form Messages */}
+                 <div>
+                   <h4 className="text-md font-medium text-gray-900 mb-3">Form Messages</h4>
+                   <div className="space-y-3">
+                                           <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Success Message</label>
+                        <input
+                          type="text"
+                          value={pendingSettings?.successMessage || "Form submitted successfully!"}
+                          onChange={(e) => {
+                            updatePendingSettings({
+                              successMessage: e.target.value
+                            });
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Form submitted successfully!"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Error Message</label>
+                        <input
+                          type="text"
+                          value={pendingSettings?.errorMessage || "Please check your form and try again."}
+                          onChange={(e) => {
+                            updatePendingSettings({
+                              errorMessage: e.target.value
+                            });
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Please check your form and try again."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Redirect URL (after submission)</label>
+                        <input
+                          type="text"
+                          value={pendingSettings?.redirectUrl || "/thank-you"}
+                          onChange={(e) => {
+                            updatePendingSettings({
+                              redirectUrl: e.target.value
+                            });
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="/thank-you"
+                        />
+                      </div>
+                   </div>
+                 </div>
+
+                 {/* Post-Submission Settings */}
+                 <div>
+                   <h4 className="text-md font-medium text-gray-900 mb-3">Post-Submission Behavior</h4>
+                   <div className="space-y-4">
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                       <label className="flex items-center space-x-3 cursor-pointer">
+                         <input
+                           type="checkbox"
+                           checked={selectedForm.settings?.postSubmission?.showSuccessPage !== false}
+                                                    onChange={async (e) => {
+                           try {
+                             const currentPostSubmission = selectedForm.settings?.postSubmission || {};
+                             const newSettings = {
+                               ...selectedForm.settings,
+                               postSubmission: {
+                                 ...currentPostSubmission,
+                                 showSuccessPage: e.target.checked
+                               }
+                             };
+                             
+                             // Update local state immediately for better UX
+                             setSelectedForm({
+                               ...selectedForm,
+                               settings: newSettings
+                             });
+                             
+                             // Update in forms list
+                             setForms(prevForms => 
+                               prevForms.map(form => 
+                                 form.id === selectedForm.id 
+                                   ? { ...form, settings: newSettings }
+                                   : form
+                               )
+                             );
+                             
+                             // Save to backend
+                             await fileFormManager.updateForm(selectedForm.id, {
+                               settings: newSettings
+                             });
+                           } catch (error) {
+                             console.error('Error updating post-submission settings:', error);
+                             // Revert on error
+                             loadForms();
+                           }
+                         }}
+                           className="w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2"
+                         />
+                         <span className="text-sm text-gray-700">Show success page after submission</span>
+                       </label>
+                       <label className="flex items-center space-x-3 cursor-pointer">
+                         <input
+                           type="checkbox"
+                           checked={selectedForm.settings?.postSubmission?.showSubmittedData || false}
+                                                    onChange={async (e) => {
+                           try {
+                             const currentPostSubmission = selectedForm.settings?.postSubmission || {};
+                             const newSettings = {
+                               ...selectedForm.settings,
+                               postSubmission: {
+                                 ...currentPostSubmission,
+                                 showSubmittedData: e.target.checked
+                               }
+                             };
+                             
+                             // Update local state immediately for better UX
+                             setSelectedForm({
+                               ...selectedForm,
+                               settings: newSettings
+                             });
+                             
+                             // Update in forms list
+                             setForms(prevForms => 
+                               prevForms.map(form => 
+                                 form.id === selectedForm.id 
+                                   ? { ...form, settings: newSettings }
+                                   : form
+                               )
+                             );
+                             
+                             // Save to backend
+                             await fileFormManager.updateForm(selectedForm.id, {
+                               settings: newSettings
+                             });
+                           } catch (error) {
+                             console.error('Error updating post-submission settings:', error);
+                             // Revert on error
+                             loadForms();
+                           }
+                         }}
+                           className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                         />
+                         <span className="text-sm text-gray-700">Show submitted data to user</span>
+                       </label>
+                       <label className="flex items-center space-x-3 cursor-pointer">
+                         <input
+                           type="checkbox"
+                           checked={selectedForm.settings?.postSubmission?.allowResubmit || false}
+                                                    onChange={async (e) => {
+                           try {
+                             const currentPostSubmission = selectedForm.settings?.postSubmission || {};
+                             const newSettings = {
+                               ...selectedForm.settings,
+                               postSubmission: {
+                                 ...currentPostSubmission,
+                                 allowResubmit: e.target.checked
+                               }
+                             };
+                             
+                             // Update local state immediately for better UX
+                             setSelectedForm({
+                               ...selectedForm,
+                               settings: newSettings
+                             });
+                             
+                             // Update in forms list
+                             setForms(prevForms => 
+                               prevForms.map(form => 
+                                 form.id === selectedForm.id 
+                                   ? { ...form, settings: newSettings }
+                                   : form
+                               )
+                             );
+                             
+                             // Save to backend
+                             await fileFormManager.updateForm(selectedForm.id, {
+                               settings: newSettings
+                             });
+                           } catch (error) {
+                             console.error('Error updating post-submission settings:', error);
+                             // Revert on error
+                             loadForms();
+                           }
+                         }}
+                           className="w-5 h-5 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
+                         />
+                         <span className="text-sm text-gray-700">Allow user to submit again</span>
+                       </label>
+                       <label className="flex items-center space-x-3 cursor-pointer">
+                         <input
+                           type="checkbox"
+                           checked={selectedForm.settings?.postSubmission?.autoRedirect?.enabled || false}
+                                                    onChange={async (e) => {
+                           try {
+                             const currentPostSubmission = selectedForm.settings?.postSubmission || {};
+                             const currentAutoRedirect = currentPostSubmission.autoRedirect || {};
+                             const newSettings = {
+                               ...selectedForm.settings,
+                               postSubmission: {
+                                 ...currentPostSubmission,
+                                 autoRedirect: {
+                                   ...currentAutoRedirect,
+                                   enabled: e.target.checked
+                                 }
+                               }
+                             };
+                             
+                             // Update local state immediately for better UX
+                             setSelectedForm({
+                               ...selectedForm,
+                               settings: newSettings
+                             });
+                             
+                             // Update in forms list
+                             setForms(prevForms => 
+                               prevForms.map(form => 
+                                 form.id === selectedForm.id 
+                                   ? { ...form, settings: newSettings }
+                                   : form
+                               )
+                             );
+                             
+                             // Save to backend
+                             await fileFormManager.updateForm(selectedForm.id, {
+                               settings: newSettings
+                             });
+                           } catch (error) {
+                             console.error('Error updating post-submission settings:', error);
+                             // Revert on error
+                             loadForms();
+                           }
+                         }}
+                           className="w-5 h-5 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 focus:ring-2"
+                         />
+                         <span className="text-sm text-gray-700">Auto-redirect after submission</span>
+                       </label>
+                     </div>
+                     
+                     {/* Conditional fields based on checkboxes */}
+                     {selectedForm.settings?.postSubmission?.allowResubmit && (
+                       <div>
+                         <label className="block text-sm font-medium text-gray-700 mb-1">Resubmit Button Text</label>
+                         <input
+                           type="text"
+                           value={selectedForm.settings?.postSubmission?.resubmitText || "Submit Another Request"}
+                           onChange={async (e) => {
+                             try {
+                               const currentPostSubmission = selectedForm.settings?.postSubmission || {};
+                               const newSettings = {
+                                 ...selectedForm.settings,
+                                 postSubmission: {
+                                   ...currentPostSubmission,
+                                   resubmitText: e.target.value
+                                 }
+                               };
+                               
+                               // Update local state immediately for better UX
+                               setSelectedForm({
+                                 ...selectedForm,
+                                 settings: newSettings
+                               });
+                               
+                               // Update in forms list
+                               setForms(prevForms => 
+                                 prevForms.map(form => 
+                                   form.id === selectedForm.id 
+                                     ? { ...form, settings: newSettings }
+                                     : form
+                                 )
+                               );
+                               
+                               // Save to backend
+                               await fileFormManager.updateForm(selectedForm.id, {
+                                 settings: newSettings
+                               });
+                             } catch (error) {
+                               console.error('Error updating post-submission settings:', error);
+                               // Revert on error
+                               loadForms();
+                             }
+                           }}
+                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="Submit Another Request"
+                         />
+                       </div>
+                     )}
+                     
+                     {selectedForm.settings?.postSubmission?.autoRedirect?.enabled && (
+                       <div>
+                         <label className="block text-sm font-medium text-gray-700 mb-1">Auto-redirect Delay (seconds)</label>
+                         <input
+                           type="number"
+                           min="1"
+                           max="30"
+                           value={Math.round((selectedForm.settings?.postSubmission?.autoRedirect?.delay || 3000) / 1000)}
+                           onChange={async (e) => {
+                             try {
+                               const currentPostSubmission = selectedForm.settings?.postSubmission || {};
+                               const currentAutoRedirect = currentPostSubmission.autoRedirect || {};
+                               const newSettings = {
+                                 ...selectedForm.settings,
+                                 postSubmission: {
+                                   ...currentPostSubmission,
+                                   autoRedirect: {
+                                     ...currentAutoRedirect,
+                                     delay: parseInt(e.target.value) * 1000
+                                   }
+                                 }
+                               };
+                               
+                               // Update local state immediately for better UX
+                               setSelectedForm({
+                                 ...selectedForm,
+                                 settings: newSettings
+                               });
+                               
+                               // Update in forms list
+                               setForms(prevForms => 
+                                 prevForms.map(form => 
+                                   form.id === selectedForm.id 
+                                     ? { ...form, settings: newSettings }
+                                     : form
+                                 )
+                               );
+                               
+                               // Save to backend
+                               await fileFormManager.updateForm(selectedForm.id, {
+                                 settings: newSettings
+                               });
+                             } catch (error) {
+                               console.error('Error updating post-submission settings:', error);
+                               // Revert on error
+                               loadForms();
+                             }
+                           }}
+                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="3"
+                         />
+                       </div>
+                     )}
+                     
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                       <div>
+                         <label className="block text-sm font-medium text-gray-700 mb-1">Success Icon</label>
+                         <input
+                           type="text"
+                           value={selectedForm.settings?.postSubmission?.successIcon || "✅"}
+                           onChange={async (e) => {
+                             try {
+                               const currentPostSubmission = selectedForm.settings?.postSubmission || {};
+                               const newSettings = {
+                                 ...selectedForm.settings,
+                                 postSubmission: {
+                                   ...currentPostSubmission,
+                                   successIcon: e.target.value
+                                 }
+                               };
+                               
+                               // Update local state immediately for better UX
+                               setSelectedForm({
+                                 ...selectedForm,
+                                 settings: newSettings
+                               });
+                               
+                               // Update in forms list
+                               setForms(prevForms => 
+                                 prevForms.map(form => 
+                                   form.id === selectedForm.id 
+                                     ? { ...form, settings: newSettings }
+                                     : form
+                                 )
+                               );
+                               
+                               // Save to backend
+                               await fileFormManager.updateForm(selectedForm.id, {
+                                 settings: newSettings
+                               });
+                             } catch (error) {
+                               console.error('Error updating post-submission settings:', error);
+                               // Revert on error
+                               loadForms();
+                             }
+                           }}
+                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="✅"
+                         />
+                       </div>
+                       <div>
+                         <label className="block text-sm font-medium text-gray-700 mb-1">Error Icon</label>
+                         <input
+                           type="text"
+                           value={selectedForm.settings?.postSubmission?.errorIcon || "⚠️"}
+                           onChange={async (e) => {
+                             try {
+                               const currentPostSubmission = selectedForm.settings?.postSubmission || {};
+                               const newSettings = {
+                                 ...selectedForm.settings,
+                                 postSubmission: {
+                                   ...currentPostSubmission,
+                                   errorIcon: e.target.value
+                                 }
+                               };
+                               
+                               // Update local state immediately for better UX
+                               setSelectedForm({
+                                 ...selectedForm,
+                                 settings: newSettings
+                               });
+                               
+                               // Update in forms list
+                               setForms(prevForms => 
+                                 prevForms.map(form => 
+                                   form.id === selectedForm.id 
+                                     ? { ...form, settings: newSettings }
+                                     : form
+                                 )
+                               );
+                               
+                               // Save to backend
+                               await fileFormManager.updateForm(selectedForm.id, {
+                                 settings: newSettings
+                               });
+                             } catch (error) {
+                               console.error('Error updating post-submission settings:', error);
+                               // Revert on error
+                               loadForms();
+                             }
+                           }}
+                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="⚠️"
+                         />
+                       </div>
+                     </div>
+                   </div>
+                 </div>
+
+                 {/* Form Statistics */}
+                 <div>
+                   <h4 className="text-md font-medium text-gray-900 mb-3">Form Statistics</h4>
+                   <div className="grid grid-cols-2 gap-4 text-sm">
+                     <div className="bg-gray-50 p-3 rounded-lg">
+                       <div className="text-gray-600">Total Submissions</div>
+                       <div className="text-xl font-semibold text-gray-900">{selectedForm.statistics?.totalSubmissions || 0}</div>
+                     </div>
+                     <div className="bg-gray-50 p-3 rounded-lg">
+                       <div className="text-gray-600">Total Views</div>
+                       <div className="text-xl font-semibold text-gray-900">{selectedForm.statistics?.totalViews || 0}</div>
+                     </div>
+                     <div className="bg-gray-50 p-3 rounded-lg">
+                       <div className="text-gray-600">Last Submission</div>
+                       <div className="text-sm font-medium text-gray-900">
+                         {selectedForm.statistics?.lastSubmissionDate ? 
+                           new Date(selectedForm.statistics.lastSubmissionDate).toLocaleDateString() : 
+                           'Never'
+                         }
+                       </div>
+                     </div>
+                     <div className="bg-gray-50 p-3 rounded-lg">
+                       <div className="text-gray-600">Created</div>
+                       <div className="text-sm font-medium text-gray-900">
+                         {selectedForm.createdAt ? 
+                           new Date(selectedForm.createdAt).toLocaleDateString() : 
+                           'Unknown'
+                         }
+                       </div>
+                     </div>
+                   </div>
+                 </div>
+
+                 {/* Form Versions */}
+                 <div>
+                   <h4 className="text-md font-medium text-gray-900 mb-3">Version History</h4>
+                   <div className="border border-gray-200 rounded-lg divide-y">
+                     {loadingVersions ? (
+                       <div className="p-3 text-sm text-gray-500">Loading versions...</div>
+                     ) : formVersions.length === 0 ? (
+                       <div className="p-3 text-sm text-gray-500">No versions found yet.</div>
+                     ) : (
+                       formVersions.map(version => (
+                         <div key={version.versionNumber} className="p-3 flex items-center justify-between">
+                           <div>
+                             <div className="text-sm font-medium text-gray-900">
+                               v{version.versionNumber} - {version.changeSummary || 'Form update'}
+                             </div>
+                             <div className="text-xs text-gray-500">
+                               {version.createdAt ? new Date(version.createdAt).toLocaleString() : 'Unknown date'}
+                               {version.createdBy?.name ? ` by ${version.createdBy.name}` : ''}
+                             </div>
+                           </div>
+                           <button
+                             onClick={() => handleRestoreVersion(version.versionNumber)}
+                             disabled={restoringVersion}
+                             className="px-3 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded hover:bg-blue-200 disabled:opacity-60"
+                           >
+                             {restoringVersion ? 'Restoring...' : 'Restore'}
+                           </button>
+                         </div>
+                       ))
+                     )}
+                   </div>
+                 </div>
+               </div>
+             </div>
+                           <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+                <button
+                  onClick={handleCloseSettings}
+                  className="px-4 py-2 text-sm bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                >
+                  {hasUnsavedChanges ? 'Cancel' : 'Close'}
+                </button>
+              </div>
+           </div>
+         </div>
+       )}
+
+       {/* Theme Editor Modal */}
+       {showThemeEditor && selectedFormForTheme && (
+         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+           <div className="w-full h-full max-w-[95vw] max-h-[95vh] overflow-hidden">
+                           <ThemeEditor
+                initialTheme={selectedFormForTheme.ui_part}
+               onSave={async (uiConfig) => {
+                 try {
+                   // Update form with new UI configuration
+                   const updatedForm = {
+                     ...selectedFormForTheme,
+                     ui_part: uiConfig
+                   };
+                   
+                   // Update in backend
+                   await fileFormManager.updateForm(selectedFormForTheme.id, {
+                     ui_part: uiConfig
+                   });
+                   
+                   // Update local state
+                   setForms(prevForms => 
+                     prevForms.map(form => 
+                       form.id === selectedFormForTheme.id 
+                         ? updatedForm
+                         : form
+                     )
+                   );
+                   
+                   setShowThemeEditor(false);
+                   setSelectedFormForTheme(null);
+                 } catch (error) {
+                   console.error('Error saving theme:', error);
+                   // You might want to show a toast notification here
+                 }
+               }}
+               onClose={() => {
+                 setShowThemeEditor(false);
+                 setSelectedFormForTheme(null);
+               }}
+               currentForm={selectedFormForTheme}
+             />
+           </div>
+         </div>
+       )}
+    </div>
+  );
+} 
