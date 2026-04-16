@@ -2,6 +2,7 @@ const Form = require('../models/Form');
 const Submission = require('../models/Submission');
 const { buildScopedFormQuery } = require('../utils/workspaceHelper');
 const { createFormVersion } = require('../utils/formVersionHelper');
+const { logAuditEvent } = require('../utils/auditLogger');
 const {
   successResponse,
   errorResponse,
@@ -11,6 +12,12 @@ const {
   conflictResponse,
   createdResponse
 } = require('../utils/responseHelper');
+
+const getChangedFields = (updates = {}) => (
+  Object.keys(updates)
+    .filter((key) => key !== 'changeSummary')
+    .slice(0, 20)
+);
 
 // Get all forms (summary only - no schema for fast loading)
 exports.getAllForms = async (req, res) => {
@@ -149,6 +156,18 @@ exports.createForm = async (req, res) => {
       user: req.user,
       changeSummary: 'Initial version'
     });
+
+    await logAuditEvent(req, {
+      action: 'FORM_CREATED',
+      entityType: 'form',
+      entityId: form.id,
+      metadata: {
+        formName: form.name,
+        formType: form.type || '',
+        isPublished: Boolean(form.status?.isPublished),
+        isTemplate: Boolean(form.status?.isTemplate)
+      }
+    });
     
     return createdResponse(res, form, 'Form created successfully');
   } catch (error) {
@@ -193,6 +212,16 @@ exports.updateForm = async (req, res) => {
       changeSummary: updates.changeSummary || 'Form updated'
     });
 
+    await logAuditEvent(req, {
+      action: 'FORM_UPDATED',
+      entityType: 'form',
+      entityId: form.id,
+      metadata: {
+        formName: form.name,
+        changedFields: getChangedFields(updates)
+      }
+    });
+
     return successResponse(res, form, 'Form updated successfully');
   } catch (error) {
     return errorResponse(res, error.message || 'Failed to update form', 500);
@@ -211,6 +240,15 @@ exports.deleteForm = async (req, res) => {
     if (!form) {
       return notFoundResponse(res, 'Form not found');
     }
+
+    await logAuditEvent(req, {
+      action: 'FORM_DELETED',
+      entityType: 'form',
+      entityId: form.id,
+      metadata: {
+        formName: form.name
+      }
+    });
     
     // Return confirmation message (consistent with frontend)
     return successResponse(res, {
@@ -268,6 +306,17 @@ exports.duplicateForm = async (req, res) => {
       form: duplicateForm,
       user: req.user,
       changeSummary: 'Initial version (duplicate)'
+    });
+
+    await logAuditEvent(req, {
+      action: 'FORM_DUPLICATED',
+      entityType: 'form',
+      entityId: duplicateForm.id,
+      metadata: {
+        sourceFormId: originalForm.id,
+        sourceFormName: originalForm.name,
+        duplicatedFormName: duplicateForm.name
+      }
     });
     
     return createdResponse(res, duplicateForm, 'Form duplicated successfully');

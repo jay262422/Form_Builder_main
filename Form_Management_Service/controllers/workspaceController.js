@@ -13,6 +13,7 @@ const {
   generateInviteToken,
   updateUserWorkspaceContext
 } = require('../utils/workspaceHelper');
+const { logAuditEvent } = require('../utils/auditLogger');
 
 const canManageWorkspace = (user) => WORKSPACE_ADMIN_ROLES.includes(user.workspaceRole || 'viewer');
 
@@ -55,6 +56,15 @@ exports.updateMyWorkspace = async (req, res) => {
 
     workspace.name = name.trim();
     await workspace.save();
+
+    await logAuditEvent(req, {
+      action: 'WORKSPACE_UPDATED',
+      entityType: 'workspace',
+      entityId: workspace._id.toString(),
+      metadata: {
+        workspaceName: workspace.name
+      }
+    });
 
     return successResponse(res, { workspace }, 'Workspace updated successfully');
   } catch (error) {
@@ -102,6 +112,17 @@ exports.inviteMember = async (req, res) => {
     });
 
     await workspace.save();
+
+    await logAuditEvent(req, {
+      action: 'WORKSPACE_MEMBER_INVITED',
+      entityType: 'workspace_member',
+      entityId: normalizedEmail,
+      metadata: {
+        workspaceId: workspace._id.toString(),
+        invitedEmail: normalizedEmail,
+        invitedRole: role
+      }
+    });
 
     return successResponse(res, {
       invite: {
@@ -154,6 +175,17 @@ exports.acceptInvitation = async (req, res) => {
     await workspace.save();
     await updateUserWorkspaceContext(currentUser._id, workspace._id, invitation.role);
 
+    await logAuditEvent(req, {
+      action: 'WORKSPACE_INVITATION_ACCEPTED',
+      entityType: 'workspace_member',
+      entityId: currentUser._id.toString(),
+      metadata: {
+        workspaceId: workspace._id.toString(),
+        memberEmail: currentUser.email,
+        role: invitation.role
+      }
+    });
+
     return successResponse(res, { workspace }, 'Invitation accepted successfully');
   } catch (error) {
     return errorResponse(res, error.message || 'Failed to accept invitation', 500);
@@ -187,9 +219,21 @@ exports.updateMemberRole = async (req, res) => {
       return errorResponse(res, 'Cannot change owner role', 400, 'invalid_operation');
     }
 
+    const previousRole = member.role;
     member.role = role;
     await workspace.save();
     await updateUserWorkspaceContext(userId, workspace._id, role);
+
+    await logAuditEvent(req, {
+      action: 'WORKSPACE_MEMBER_ROLE_UPDATED',
+      entityType: 'workspace_member',
+      entityId: userId,
+      metadata: {
+        workspaceId: workspace._id.toString(),
+        previousRole,
+        newRole: role
+      }
+    });
 
     return successResponse(res, { workspace }, 'Member role updated successfully');
   } catch (error) {
@@ -218,9 +262,25 @@ exports.removeMember = async (req, res) => {
       return errorResponse(res, 'Cannot remove workspace owner', 400, 'invalid_operation');
     }
 
+    const removedMember = {
+      userId: member.userId?.toString() || '',
+      email: member.email,
+      role: member.role
+    };
+
     workspace.members = workspace.members.filter(m => !(m.userId && m.userId.toString() === userId));
     await workspace.save();
     await updateUserWorkspaceContext(userId, null, 'viewer');
+
+    await logAuditEvent(req, {
+      action: 'WORKSPACE_MEMBER_REMOVED',
+      entityType: 'workspace_member',
+      entityId: userId,
+      metadata: {
+        workspaceId: workspace._id.toString(),
+        removedMember
+      }
+    });
 
     return successResponse(res, { workspace }, 'Member removed successfully');
   } catch (error) {

@@ -81,6 +81,9 @@ const SIMPLE_API_CONFIG = {
       acceptInvite: '/api/workspaces/invitations/accept',
       updateMemberRole: '/api/workspaces/me/members/:userId/role',
       removeMember: '/api/workspaces/me/members/:userId'
+    },
+    auditLogs: {
+      getMine: '/api/audit-logs/me'
     }
   },
 

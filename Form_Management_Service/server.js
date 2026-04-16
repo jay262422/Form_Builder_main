@@ -13,6 +13,7 @@ const dynamicMappingsRoutes = require('./routes/dynamicMappingsRoutes');
 const submissionRoutes = require('./routes/submissionRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const workspaceRoutes = require('./routes/workspaceRoutes');
+const auditLogRoutes = require('./routes/auditLogRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3004;
@@ -50,6 +51,7 @@ app.use('/api/dynamic-mappings', dynamicMappingsRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/category-management', categoryRoutes);
 app.use('/api/workspaces', workspaceRoutes);
+app.use('/api/audit-logs', auditLogRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

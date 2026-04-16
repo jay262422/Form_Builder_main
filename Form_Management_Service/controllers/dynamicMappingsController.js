@@ -1,5 +1,6 @@
 const DynamicMapping = require('../models/DynamicMapping');
 const FieldOption = require('../models/FieldOption');
+const { logAuditEvent } = require('../utils/auditLogger');
 const {
   successResponse,
   errorResponse,
@@ -116,6 +117,17 @@ exports.createMapping = async (req, res) => {
     });
     
     await dynamicMapping.save();
+
+    await logAuditEvent(req, {
+      action: 'DYNAMIC_MAPPING_CREATED',
+      entityType: 'dynamic_mapping',
+      entityId: dynamicMapping.id,
+      metadata: {
+        name: dynamicMapping.name,
+        parentField: dynamicMapping.parentField,
+        childField: dynamicMapping.childField
+      }
+    });
     
     return createdResponse(res, dynamicMapping, 'Dynamic mapping created successfully');
   } catch (error) {
@@ -142,6 +154,15 @@ exports.updateMapping = async (req, res) => {
     if (!mapping) {
       return notFoundResponse(res, 'Mapping not found');
     }
+
+    await logAuditEvent(req, {
+      action: 'DYNAMIC_MAPPING_UPDATED',
+      entityType: 'dynamic_mapping',
+      entityId: mapping.id || mapping._id.toString(),
+      metadata: {
+        name: mapping.name
+      }
+    });
     
     return successResponse(res, mapping, 'Dynamic mapping updated successfully');
   } catch (error) {
@@ -162,6 +183,15 @@ exports.deleteMapping = async (req, res) => {
     if (!mapping) {
       return notFoundResponse(res, 'Mapping not found');
     }
+
+    await logAuditEvent(req, {
+      action: 'DYNAMIC_MAPPING_DELETED',
+      entityType: 'dynamic_mapping',
+      entityId: mapping.id || mapping._id.toString(),
+      metadata: {
+        name: mapping.name
+      }
+    });
     
     return successResponse(res, null, 'Mapping deleted successfully');
   } catch (error) {
@@ -340,6 +370,16 @@ exports.bulkCreateMappings = async (req, res) => {
         }
       }
     }
+
+    await logAuditEvent(req, {
+      action: 'DYNAMIC_MAPPING_BULK_CREATED',
+      entityType: 'dynamic_mapping',
+      entityId: '',
+      metadata: {
+        createdCount: createdMappings.length,
+        errorCount: errors.length
+      }
+    });
     
     return createdResponse(res, {
       created: createdMappings.length,

@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const dynamicMappingsController = require('../controllers/dynamicMappingsController');
-const { authenticate, optionalAuth } = require('../middleware/auth');
+const { authenticate, optionalAuth, authorizeWorkspace } = require('../middleware/auth');
+const { WORKSPACE_ADMIN_ROLES } = require('../utils/workspaceHelper');
 
 // Public routes (read-only)
 // GET /api/dynamic-mappings - Get all mappings
@@ -36,15 +37,35 @@ router.post('/:mappingId/test', optionalAuth, dynamicMappingsController.testMapp
 
 // Protected routes (require authentication)
 // POST /api/dynamic-mappings - Create new mapping
-router.post('/', authenticate, dynamicMappingsController.createMapping);
+router.post(
+  '/',
+  authenticate,
+  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  dynamicMappingsController.createMapping
+);
 
 // PUT /api/dynamic-mappings/:id - Update mapping
-router.put('/:id', authenticate, dynamicMappingsController.updateMapping);
+router.put(
+  '/:id',
+  authenticate,
+  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  dynamicMappingsController.updateMapping
+);
 
 // DELETE /api/dynamic-mappings/:id - Delete mapping
-router.delete('/:id', authenticate, dynamicMappingsController.deleteMapping);
+router.delete(
+  '/:id',
+  authenticate,
+  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  dynamicMappingsController.deleteMapping
+);
 
 // POST /api/dynamic-mappings/bulk - Bulk create mappings
-router.post('/bulk', authenticate, dynamicMappingsController.bulkCreateMappings);
+router.post(
+  '/bulk',
+  authenticate,
+  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  dynamicMappingsController.bulkCreateMappings
+);
 
 module.exports = router; 

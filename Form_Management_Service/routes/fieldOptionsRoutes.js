@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const fieldOptionsController = require('../controllers/fieldOptionsController');
-const { authenticate, optionalAuth } = require('../middleware/auth');
+const { authenticate, optionalAuth, authorizeWorkspace } = require('../middleware/auth');
+const { WORKSPACE_ADMIN_ROLES } = require('../utils/workspaceHelper');
 
 // Public routes (read-only)
 // GET /api/field-options - Get all field option types
@@ -18,27 +19,67 @@ router.post('/schema', optionalAuth, fieldOptionsController.getOptionsForSchema)
 
 // Protected routes (require authentication)
 // POST /api/field-options - Create new field option type
-router.post('/', authenticate, fieldOptionsController.createFieldOptionType);
+router.post(
+  '/',
+  authenticate,
+  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  fieldOptionsController.createFieldOptionType
+);
 
 // PUT /api/field-options/:id - Update field option type
-router.put('/:id', authenticate, fieldOptionsController.updateFieldOptionType);
+router.put(
+  '/:id',
+  authenticate,
+  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  fieldOptionsController.updateFieldOptionType
+);
 
 // DELETE /api/field-options/:id - Delete field option type
-router.delete('/:id', authenticate, fieldOptionsController.deleteFieldOptionType);
+router.delete(
+  '/:id',
+  authenticate,
+  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  fieldOptionsController.deleteFieldOptionType
+);
 
 // POST /api/field-options/:id/options - Add option to existing type
-router.post('/:id/options', authenticate, fieldOptionsController.addOption);
+router.post(
+  '/:id/options',
+  authenticate,
+  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  fieldOptionsController.addOption
+);
 
 // PUT /api/field-options/:id/options/:optionValue - Update specific option
-router.put('/:id/options/:optionValue', authenticate, fieldOptionsController.updateOption);
+router.put(
+  '/:id/options/:optionValue',
+  authenticate,
+  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  fieldOptionsController.updateOption
+);
 
 // DELETE /api/field-options/:id/options/:optionValue - Remove option from type
-router.delete('/:id/options/:optionValue', authenticate, fieldOptionsController.removeOption);
+router.delete(
+  '/:id/options/:optionValue',
+  authenticate,
+  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  fieldOptionsController.removeOption
+);
 
 // POST /api/field-options/bulk - Bulk create field option types
-router.post('/bulk', authenticate, fieldOptionsController.bulkCreateFieldOptionTypes);
+router.post(
+  '/bulk',
+  authenticate,
+  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  fieldOptionsController.bulkCreateFieldOptionTypes
+);
 
 // POST /api/field-options/import - Import options from JSON
-router.post('/import', authenticate, fieldOptionsController.importOptions);
+router.post(
+  '/import',
+  authenticate,
+  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  fieldOptionsController.importOptions
+);
 
 module.exports = router; 

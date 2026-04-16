@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const { ensureUserWorkspace } = require('../utils/workspaceHelper');
+const { logAuditEvent } = require('../utils/auditLogger');
 const {
   successResponse,
   errorResponse,
@@ -163,6 +164,19 @@ exports.updateProfile = async (req, res) => {
 
     await user.save();
 
+    await logAuditEvent(req, {
+      action: 'USER_PROFILE_UPDATED',
+      entityType: 'user',
+      entityId: user._id.toString(),
+      metadata: {
+        updatedFields: [
+          ...(name ? ['name'] : []),
+          ...(settings ? ['settings'] : []),
+          ...(profile ? ['profile'] : [])
+        ]
+      }
+    });
+
     return successResponse(res, {
       user: user.toPublicJSON()
     }, 'Profile updated successfully');
@@ -200,6 +214,13 @@ exports.changePassword = async (req, res) => {
     // Update password
     user.password = newPassword;
     await user.save();
+
+    await logAuditEvent(req, {
+      action: 'USER_PASSWORD_CHANGED',
+      entityType: 'user',
+      entityId: user._id.toString(),
+      metadata: {}
+    });
 
     return successResponse(res, null, 'Password changed successfully');
   } catch (error) {

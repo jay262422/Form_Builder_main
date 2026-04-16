@@ -7,6 +7,7 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import { useAuth } from '../../contexts/AuthContext';
 import authService from '../../services/authService';
 import workspaceService from '../../services/workspaceService';
+import auditLogService from '../../services/auditLogService';
 
 const MEMBER_ROLES = ['admin', 'editor', 'viewer'];
 
@@ -37,6 +38,15 @@ export default function SettingsPage() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isSavingWorkspace, setIsSavingWorkspace] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditPagination, setAuditPagination] = useState({
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 1
+  });
+  const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
+  const [auditError, setAuditError] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -68,6 +78,37 @@ export default function SettingsPage() {
 
   const myWorkspaceRole = useMemo(() => user?.workspaceRole || 'viewer', [user]);
   const canManageWorkspace = myWorkspaceRole === 'owner' || myWorkspaceRole === 'admin';
+
+  const loadAuditLogs = async (page = 1) => {
+    setAuditError('');
+    setIsLoadingAuditLogs(true);
+    try {
+      const data = await auditLogService.getWorkspaceAuditLogs({
+        page,
+        limit: auditPagination.limit
+      });
+      setAuditLogs(Array.isArray(data.logs) ? data.logs : []);
+      setAuditPagination(prev => ({
+        ...prev,
+        ...(data.pagination || prev),
+        page: data.pagination?.page || page
+      }));
+    } catch (err) {
+      setAuditError(err.message || 'Failed to load audit logs');
+    } finally {
+      setIsLoadingAuditLogs(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!user || !canManageWorkspace) {
+      setAuditLogs([]);
+      setAuditError('');
+      return;
+    }
+
+    loadAuditLogs(1);
+  }, [user, canManageWorkspace]);
 
   const clearFeedback = () => {
     setMessage('');
@@ -195,6 +236,18 @@ export default function SettingsPage() {
     } catch (err) {
       setError(err.message || 'Failed to remove member');
     }
+  };
+
+  const formatAuditMetadata = (metadata) => {
+    if (!metadata || typeof metadata !== 'object' || Object.keys(metadata).length === 0) {
+      return '-';
+    }
+
+    const compact = JSON.stringify(metadata);
+    if (compact.length > 120) {
+      return `${compact.slice(0, 117)}...`;
+    }
+    return compact;
   };
 
   if (loading) {
@@ -463,6 +516,95 @@ export default function SettingsPage() {
               </table>
             </div>
           </section>
+
+          {canManageWorkspace && (
+            <section className="bg-white rounded-lg border border-gray-200 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">Audit Logs</h2>
+                <button
+                  onClick={() => loadAuditLogs(auditPagination.page || 1)}
+                  className="px-3 py-2 text-xs font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {auditError && (
+                <div className="mb-4 p-3 text-sm text-red-800 bg-red-100 rounded-md">
+                  {auditError}
+                </div>
+              )}
+
+              <div className="border rounded-md overflow-x-auto">
+                <table className="w-full text-sm min-w-[780px]">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="text-left px-3 py-2">Time</th>
+                      <th className="text-left px-3 py-2">Action</th>
+                      <th className="text-left px-3 py-2">User</th>
+                      <th className="text-left px-3 py-2">Entity</th>
+                      <th className="text-left px-3 py-2">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {isLoadingAuditLogs ? (
+                      <tr>
+                        <td colSpan={5} className="px-3 py-6 text-center text-gray-500">Loading logs...</td>
+                      </tr>
+                    ) : auditLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-3 py-6 text-center text-gray-500">No logs yet.</td>
+                      </tr>
+                    ) : (
+                      auditLogs.map((log) => (
+                        <tr key={log._id} className="border-t align-top">
+                          <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                            {log.createdAt ? new Date(log.createdAt).toLocaleString() : '-'}
+                          </td>
+                          <td className="px-3 py-2 font-medium text-gray-900">{log.action}</td>
+                          <td className="px-3 py-2">
+                            <div className="text-gray-900">{log.userName || 'system'}</div>
+                            <div className="text-gray-500">{log.userEmail || '-'}</div>
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="text-gray-900">{log.entityType || '-'}</div>
+                            <div className="text-gray-500">{log.entityId || '-'}</div>
+                          </td>
+                          <td className="px-3 py-2 text-gray-700 break-all">
+                            {formatAuditMetadata(log.metadata)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
+                <span>
+                  {auditPagination.total > 0
+                    ? `Showing page ${auditPagination.page} of ${auditPagination.totalPages} (${auditPagination.total} total)`
+                    : 'No records'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => loadAuditLogs((auditPagination.page || 1) - 1)}
+                    disabled={(auditPagination.page || 1) <= 1 || isLoadingAuditLogs}
+                    className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => loadAuditLogs((auditPagination.page || 1) + 1)}
+                    disabled={(auditPagination.page || 1) >= (auditPagination.totalPages || 1) || isLoadingAuditLogs}
+                    className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
         </div>
       </div>
     </ProtectedRoute>

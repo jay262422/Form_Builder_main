@@ -1,4 +1,5 @@
 const FieldOption = require('../models/FieldOption');
+const { logAuditEvent } = require('../utils/auditLogger');
 const {
   successResponse,
   errorResponse,
@@ -135,6 +136,15 @@ exports.createFieldOptionType = async (req, res) => {
     });
     
     await fieldOption.save();
+    await logAuditEvent(req, {
+      action: 'FIELD_OPTION_TYPE_CREATED',
+      entityType: 'field_option',
+      entityId: fieldOption._id.toString(),
+      metadata: {
+        optionType: fieldOption.optionType,
+        optionsCount: fieldOption.options?.length || 0
+      }
+    });
     return createdResponse(res, fieldOption, 'Field option type created successfully');
   } catch (error) {
     console.error('Error creating field option type:', error);
@@ -160,6 +170,15 @@ exports.updateFieldOptionType = async (req, res) => {
     if (!fieldOption) {
       return notFoundResponse(res, 'Field option type not found');
     }
+
+    await logAuditEvent(req, {
+      action: 'FIELD_OPTION_TYPE_UPDATED',
+      entityType: 'field_option',
+      entityId: fieldOption._id.toString(),
+      metadata: {
+        optionType: fieldOption.optionType
+      }
+    });
     
     return successResponse(res, fieldOption, 'Field option type updated successfully');
   } catch (error) {
@@ -180,6 +199,15 @@ exports.deleteFieldOptionType = async (req, res) => {
     if (!fieldOption) {
       return notFoundResponse(res, 'Field option type not found');
     }
+
+    await logAuditEvent(req, {
+      action: 'FIELD_OPTION_TYPE_DELETED',
+      entityType: 'field_option',
+      entityId: fieldOption._id.toString(),
+      metadata: {
+        optionType: fieldOption.optionType
+      }
+    });
     
     return successResponse(res, null, 'Field option type deleted successfully');
   } catch (error) {
@@ -218,6 +246,16 @@ exports.addOption = async (req, res) => {
     
     fieldOption.options.push(newOption);
     await fieldOption.save();
+
+    await logAuditEvent(req, {
+      action: 'FIELD_OPTION_ADDED',
+      entityType: 'field_option',
+      entityId: fieldOption._id.toString(),
+      metadata: {
+        optionType: fieldOption.optionType,
+        optionValue: value
+      }
+    });
     
     return successResponse(res, fieldOption, 'Option added successfully');
   } catch (error) {
@@ -248,6 +286,16 @@ exports.updateOption = async (req, res) => {
     };
     
     await fieldOption.save();
+
+    await logAuditEvent(req, {
+      action: 'FIELD_OPTION_UPDATED',
+      entityType: 'field_option',
+      entityId: fieldOption._id.toString(),
+      metadata: {
+        optionType: fieldOption.optionType,
+        optionValue
+      }
+    });
     return successResponse(res, fieldOption, 'Option updated successfully');
   } catch (error) {
     return errorResponse(res, error.message || 'Failed to update option', 500);
@@ -271,6 +319,16 @@ exports.removeOption = async (req, res) => {
     
     fieldOption.options.splice(optionIndex, 1);
     await fieldOption.save();
+
+    await logAuditEvent(req, {
+      action: 'FIELD_OPTION_REMOVED',
+      entityType: 'field_option',
+      entityId: fieldOption._id.toString(),
+      metadata: {
+        optionType: fieldOption.optionType,
+        optionValue
+      }
+    });
     
     return successResponse(res, fieldOption, 'Option removed successfully');
   } catch (error) {
@@ -314,6 +372,16 @@ exports.bulkCreateFieldOptionTypes = async (req, res) => {
         }
       }
     }
+
+    await logAuditEvent(req, {
+      action: 'FIELD_OPTION_BULK_CREATED',
+      entityType: 'field_option',
+      entityId: '',
+      metadata: {
+        createdCount: createdTypes.length,
+        errorCount: errors.length
+      }
+    });
     
     return createdResponse(res, {
       created: createdTypes.length,
@@ -399,6 +467,16 @@ exports.importOptions = async (req, res) => {
         }
       }
     }
+
+    await logAuditEvent(req, {
+      action: 'FIELD_OPTION_IMPORTED',
+      entityType: 'field_option',
+      entityId: '',
+      metadata: {
+        createdCount: createdTypes.length,
+        errorCount: errors.length
+      }
+    });
     
     return successResponse(res, {
       created: createdTypes.length,

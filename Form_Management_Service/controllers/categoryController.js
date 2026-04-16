@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const { logAuditEvent } = require('../utils/auditLogger');
 const {
   successResponse,
   errorResponse
@@ -53,6 +54,16 @@ const saveCategories = async (req, res) => {
     
     console.log('🔧 Saving categories to:', filePath);
     await fs.writeFile(filePath, JSON.stringify(req.body, null, 2), 'utf8');
+
+    await logAuditEvent(req, {
+      action: 'CATEGORIES_SAVED',
+      entityType: 'category_config',
+      entityId: 'categoryData',
+      metadata: {
+        mainCategoriesCount: Array.isArray(req.body?.mainCategories) ? req.body.mainCategories.length : 0,
+        categoriesCount: Array.isArray(req.body?.categories) ? req.body.categories.length : 0
+      }
+    });
     
     return successResponse(res, null, 'Categories saved successfully');
   } catch (error) {
@@ -90,6 +101,16 @@ const saveLabelMappings = async (req, res) => {
     
     console.log('🔧 Saving label mappings to:', filePath);
     await fs.writeFile(filePath, JSON.stringify(req.body, null, 2), 'utf8');
+
+    await logAuditEvent(req, {
+      action: 'LABEL_MAPPINGS_SAVED',
+      entityType: 'category_config',
+      entityId: 'productLabelMappings',
+      metadata: {
+        productsCount: Array.isArray(req.body?.products) ? req.body.products.length : 0,
+        unassignedGroupsCount: Array.isArray(req.body?.unassignedGroups) ? req.body.unassignedGroups.length : 0
+      }
+    });
     
     return successResponse(res, null, 'Label mappings saved successfully');
   } catch (error) {

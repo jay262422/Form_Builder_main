@@ -7,6 +7,7 @@ const {
 } = require('../utils/responseHelper');
 const { buildScopedFormQuery } = require('../utils/workspaceHelper');
 const { createFormVersion } = require('../utils/formVersionHelper');
+const { logAuditEvent } = require('../utils/auditLogger');
 
 const getScopedForm = async (req, formId) => {
   const query = buildScopedFormQuery(req, { id: formId });
@@ -86,6 +87,16 @@ exports.restoreFormVersion = async (req, res) => {
       form,
       user: req.user,
       changeSummary: `Restored from v${versionNumber}`
+    });
+
+    await logAuditEvent(req, {
+      action: 'FORM_VERSION_RESTORED',
+      entityType: 'form',
+      entityId: form.id,
+      metadata: {
+        formName: form.name,
+        restoredVersion: versionNumber
+      }
     });
 
     return successResponse(res, { form }, `Form restored from version ${versionNumber}`);
