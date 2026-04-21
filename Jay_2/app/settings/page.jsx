@@ -47,6 +47,7 @@ export default function SettingsPage() {
   });
   const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
   const [auditError, setAuditError] = useState('');
+  const [activeTab, setActiveTab] = useState('profile');
 
   useEffect(() => {
     if (!user) return;
@@ -275,6 +276,46 @@ export default function SettingsPage() {
           {message && <div className="p-3 text-sm text-green-800 bg-green-100 rounded-md">{message}</div>}
           {error && <div className="p-3 text-sm text-red-800 bg-red-100 rounded-md">{error}</div>}
 
+          <div className="bg-white rounded-lg border border-gray-200 p-2">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`px-3 py-2 rounded-md text-sm font-medium ${
+                  activeTab === 'profile' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Profile
+              </button>
+              <button
+                onClick={() => setActiveTab('workspace')}
+                className={`px-3 py-2 rounded-md text-sm font-medium ${
+                  activeTab === 'workspace' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Workspace
+              </button>
+              <button
+                onClick={() => setActiveTab('security')}
+                className={`px-3 py-2 rounded-md text-sm font-medium ${
+                  activeTab === 'security' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Security
+              </button>
+              {canManageWorkspace && (
+                <button
+                  onClick={() => setActiveTab('audit')}
+                  className={`px-3 py-2 rounded-md text-sm font-medium ${
+                    activeTab === 'audit' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Audit
+                </button>
+              )}
+            </div>
+          </div>
+
+          {activeTab === 'profile' && (
           <section className="bg-white rounded-lg border border-gray-200 p-5">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Profile</h2>
             <form onSubmit={handleProfileSave} className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -344,7 +385,9 @@ export default function SettingsPage() {
               </div>
             </form>
           </section>
+          )}
 
+          {activeTab === 'security' && (
           <section className="bg-white rounded-lg border border-gray-200 p-5">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Change Password</h2>
             <form onSubmit={handlePasswordChange} className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -386,7 +429,9 @@ export default function SettingsPage() {
               </div>
             </form>
           </section>
+          )}
 
+          {activeTab === 'workspace' && (
           <section className="bg-white rounded-lg border border-gray-200 p-5">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Workspace</h2>
             <p className="text-sm text-gray-600 mb-4">Your role: <span className="font-medium">{myWorkspaceRole}</span></p>
@@ -516,8 +561,9 @@ export default function SettingsPage() {
               </table>
             </div>
           </section>
+          )}
 
-          {canManageWorkspace && (
+          {activeTab === 'audit' && canManageWorkspace && (
             <section className="bg-white rounded-lg border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">Audit Logs</h2>

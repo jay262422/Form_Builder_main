@@ -84,7 +84,7 @@ class FormSubmissionService {
   /**
    * Prepare submission payload with metadata
    */
-  async prepareSubmissionData(formData, formSchema, includeMetadata = true) {
+  async prepareSubmissionData(formData, formSchema, includeMetadata = true, metadataOverrides = {}) {
     const processedFormData = await this.processFileUploads(formData, formSchema);
 
     const submission = {
@@ -98,7 +98,13 @@ class FormSubmissionService {
       submission.metadata = {
         userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : null,
         ipAddress: null,
-        formName: formSchema.name || 'Untitled Form'
+        formName: formSchema.name || 'Untitled Form',
+        formType: metadataOverrides.formType || formSchema.formType || 'multi-section',
+        fieldCount: Array.isArray(formSchema.sections)
+          ? formSchema.sections.reduce((total, section) => total + (section.fields?.length || 0), 0)
+          : 0,
+        submissionMode: metadataOverrides.source || 'form-page',
+        ...metadataOverrides
       };
     }
 
@@ -208,11 +214,23 @@ class FormSubmissionService {
     return payload?.data !== undefined ? payload.data : payload;
   }
 
+  buildQueryString(params = {}) {
+    const sanitizedEntries = Object.entries(params).filter(([, value]) => (
+      value !== undefined &&
+      value !== null &&
+      value !== '' &&
+      value !== 'undefined' &&
+      value !== 'null'
+    ));
+
+    return new URLSearchParams(sanitizedEntries).toString();
+  }
+
   /**
    * Submit a form to backend
    */
   async submitForm(formData, formSchema, options = {}) {
-    const { validateBeforeSubmit = true, includeMetadata = true } = options;
+    const { validateBeforeSubmit = true, includeMetadata = true, ...metadataOverrides } = options;
 
     try {
       if (validateBeforeSubmit) {
@@ -226,7 +244,7 @@ class FormSubmissionService {
         }
       }
 
-      const submissionData = await this.prepareSubmissionData(formData, formSchema, includeMetadata);
+      const submissionData = await this.prepareSubmissionData(formData, formSchema, includeMetadata, metadataOverrides);
       const url = SIMPLE_API_CONFIG.getEndpointURL('submissions', 'create');
 
       const response = await fetch(url, {
@@ -256,8 +274,62 @@ class FormSubmissionService {
    * Get all submissions
    */
   async getSubmissions(options = {}) {
-    const queryParams = new URLSearchParams(options).toString();
+    const queryParams = this.buildQueryString(options);
     const url = `${SIMPLE_API_CONFIG.getEndpointURL('submissions', 'getAll')}${queryParams ? `?${queryParams}` : ''}`;
+    const response = await fetch(url, { headers: this.getAuthHeaders() });
+    return this.parseResponse(response);
+  }
+
+  /**
+   * Get submissions for a specific form
+   */
+  async getSubmissionsByForm(formId, options = {}) {
+    if (!formId) {
+      throw new Error('formId is required to load submissions');
+    }
+
+    const queryParams = this.buildQueryString(options);
+    const formUrl = SIMPLE_API_CONFIG.getEndpointURL('submissions', 'getByForm', { formId });
+    const url = `${formUrl}${queryParams ? `?${queryParams}` : ''}`;
+    const response = await fetch(url, { headers: this.getAuthHeaders() });
+    return this.parseResponse(response);
+  }
+
+  async getAllSubmissionsByForm(formId, options = {}) {
+    if (!formId) {
+      throw new Error('formId is required to load submissions');
+    }
+
+    const pageSize = options.limit || 100;
+    let currentPage = 1;
+    let totalPages = 1;
+    const allSubmissions = [];
+
+    do {
+      const result = await this.getSubmissionsByForm(formId, {
+        ...options,
+        limit: pageSize,
+        page: currentPage
+      });
+
+      const submissions = result?.submissions || [];
+      allSubmissions.push(...submissions);
+      totalPages = Math.max(result?.totalPages || 1, 1);
+      currentPage += 1;
+    } while (currentPage <= totalPages);
+
+    return allSubmissions;
+  }
+
+  /**
+   * Get submission statistics for a specific form
+   */
+  async getSubmissionStats(formId) {
+    if (!formId) {
+      throw new Error('formId is required to load submission stats');
+    }
+
+    const url = SIMPLE_API_CONFIG.getEndpointURL('submissions', 'getStats', { formId });
     const response = await fetch(url, { headers: this.getAuthHeaders() });
     return this.parseResponse(response);
   }
@@ -284,34 +356,179 @@ class FormSubmissionService {
   }
 
   /**
-   * Export submissions as CSV in browser
+   * Delete all submissions for a specific form by iterating existing records
    */
-  exportSubmissionsAsCSV(submissions) {
-    if (!submissions || submissions.length === 0) {
+  async clearSubmissionsByForm(formId) {
+    const submissions = await this.getAllSubmissionsByForm(formId, {
+      limit: 500,
+      sortBy: 'submittedAt',
+      sortOrder: 'desc'
+    });
+    await Promise.all(submissions.map((submission) => this.deleteSubmission(submission.submissionId)));
+
+    return {
+      success: true,
+      cleared: submissions.length
+    };
+  }
+
+  normalizeExportValue(value) {
+    if (value === null || value === undefined) {
       return '';
     }
 
-    const fieldNames = new Set();
-    submissions.forEach(submission => {
-      Object.keys(submission.formData || {}).forEach(key => fieldNames.add(key));
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => this.normalizeExportValue(item))
+        .filter(Boolean)
+        .join(' | ');
+    }
+
+    if (typeof value === 'object') {
+      if (value.name && value.type) {
+        return `${value.name} (${value.type})`;
+      }
+
+      try {
+        return JSON.stringify(value);
+      } catch (error) {
+        return String(value);
+      }
+    }
+
+    return String(value);
+  }
+
+  buildExportRows(submissions, selectedColumns = null) {
+    if (!submissions || submissions.length === 0) {
+      return [];
+    }
+
+    const rows = submissions.map((submission) => {
+      const metadata = submission.metadata || {};
+      const row = {
+        submissionId: submission.submissionId || '',
+        submittedAt: submission.submittedAt || '',
+        formId: submission.formId || '',
+        formName: metadata.formName || '',
+        formType: metadata.formType || '',
+        submissionMode: metadata.submissionMode || '',
+        fieldCount: metadata.fieldCount ?? '',
+        submitter: submission.user?.name || submission.user?.email || metadata.submittedBy || 'Anonymous',
+        submitterEmail: submission.user?.email || metadata.submitterEmail || '',
+        ipAddress: metadata.ipAddress || ''
+      };
+
+      Object.entries(submission.formData || {}).forEach(([key, value]) => {
+        row[`field_${key}`] = this.normalizeExportValue(value);
+      });
+
+      return row;
     });
 
-    const headers = ['Submission ID', 'Submitted At', ...Array.from(fieldNames)];
-    const csvRows = [headers.join(',')];
+    if (!selectedColumns || selectedColumns.length === 0) {
+      return rows;
+    }
 
-    submissions.forEach(submission => {
-      const row = [
-        submission.submissionId,
-        submission.submittedAt,
-        ...Array.from(fieldNames).map(fieldName => {
-          const value = submission.formData?.[fieldName];
-          return `"${String(value || '').replace(/"/g, '""')}"`;
-        })
-      ];
-      csvRows.push(row.join(','));
+    return rows.map((row) => selectedColumns.reduce((filteredRow, columnKey) => {
+      filteredRow[columnKey] = row[columnKey] ?? '';
+      return filteredRow;
+    }, {}));
+  }
+
+  getAvailableExportColumns(submissions) {
+    const rows = this.buildExportRows(submissions);
+    const columns = rows.reduce((columnSet, row) => {
+      Object.keys(row).forEach((key) => columnSet.add(key));
+      return columnSet;
+    }, new Set());
+
+    return Array.from(columns).map((key) => ({
+      key,
+      label: key.startsWith('field_')
+        ? `Field: ${key.replace(/^field_/, '')}`
+        : key.replace(/([A-Z])/g, ' $1').replace(/^./, (char) => char.toUpperCase())
+    }));
+  }
+
+  downloadBlob(blob, filename) {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Export submissions as CSV in browser
+   */
+  exportSubmissionsAsCSV(submissions, selectedColumns = null) {
+    const rows = this.buildExportRows(submissions, selectedColumns);
+    if (rows.length === 0) {
+      return '';
+    }
+
+    const headers = Array.from(
+      rows.reduce((headerSet, row) => {
+        Object.keys(row).forEach((key) => headerSet.add(key));
+        return headerSet;
+      }, new Set())
+    );
+
+    const escapeCsv = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const csvRows = [headers.map(escapeCsv).join(',')];
+
+    rows.forEach((row) => {
+      csvRows.push(headers.map((header) => escapeCsv(row[header])).join(','));
     });
 
     return csvRows.join('\n');
+  }
+
+  exportSubmissionsAsExcel(submissions, selectedColumns = null) {
+    const rows = this.buildExportRows(submissions, selectedColumns);
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const headers = Array.from(
+      rows.reduce((headerSet, row) => {
+        Object.keys(row).forEach((key) => headerSet.add(key));
+        return headerSet;
+      }, new Set())
+    );
+
+    const escapeHtml = (value) => String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
+    const tableHeaders = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('');
+    const tableRows = rows.map((row) => (
+      `<tr>${headers.map((header) => `<td>${escapeHtml(row[header] ?? '')}</td>`).join('')}</tr>`
+    )).join('');
+
+    return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
+      th { background: #f3f4f6; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <table>
+      <thead><tr>${tableHeaders}</tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+  </body>
+</html>`;
   }
 
   /**
@@ -323,7 +540,7 @@ class FormSubmissionService {
       throw new Error('formId is required to export submissions');
     }
 
-    const queryParams = new URLSearchParams(restQuery).toString();
+    const queryParams = this.buildQueryString(restQuery);
     const exportUrl = SIMPLE_API_CONFIG.getEndpointURL(
       'submissions',
       'export',

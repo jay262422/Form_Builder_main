@@ -1,5 +1,6 @@
 const Submission = require('../models/Submission');
 const Form = require('../models/Form');
+const { buildScopedFormQuery } = require('../utils/workspaceHelper');
 const {
   successResponse,
   errorResponse,
@@ -9,6 +10,32 @@ const {
   conflictResponse,
   createdResponse
 } = require('../utils/responseHelper');
+
+const syncFormSubmissionStatistics = async (formId) => {
+  if (!formId) return;
+
+  const totalSubmissions = await Submission.countDocuments({ formId });
+  const latestSubmission = await Submission.findOne({ formId }).sort({ submittedAt: -1 }).select('submittedAt').lean();
+
+  await Form.findOneAndUpdate(
+    { id: formId },
+    {
+      $set: {
+        'statistics.totalSubmissions': totalSubmissions,
+        'statistics.lastSubmissionDate': latestSubmission?.submittedAt || null
+      }
+    }
+  );
+};
+
+const getAccessibleFormIds = async (req) => {
+  const forms = await Form.find(buildScopedFormQuery(req, {}))
+    .select('id')
+    .lean()
+    .exec();
+
+  return forms.map((form) => form.id).filter(Boolean);
+};
 
 const getOwnedFormByCustomId = async (formId, reqUserId, reqWorkspaceId) => {
   const form = await Form.findOne({ id: formId });
@@ -29,6 +56,35 @@ const getOwnedFormByCustomId = async (formId, reqUserId, reqWorkspaceId) => {
   return { form, error: null };
 };
 
+const getOwnedSubmissionById = async (submissionId, reqUserId, reqWorkspaceId) => {
+  const submission = await Submission.findOne({ submissionId });
+
+  if (!submission) {
+    return { submission: null, form: null, error: { type: 'not_found' } };
+  }
+
+  const { form, error } = await getOwnedFormByCustomId(submission.formId, reqUserId, reqWorkspaceId);
+  if (error) {
+    return { submission: null, form: null, error };
+  }
+
+  return { submission, form, error: null };
+};
+
+const hasOwnedFormAccess = (form, reqUserId, reqWorkspaceId) => {
+  if (!form) return false;
+
+  if (reqWorkspaceId && form.workspaceId) {
+    return form.workspaceId.toString() === reqWorkspaceId.toString();
+  }
+
+  if (!form.workspaceId && reqUserId && form.userId) {
+    return form.userId.toString() === reqUserId.toString();
+  }
+
+  return false;
+};
+
 // Get all submissions
 exports.getAllSubmissions = async (req, res) => {
   try {
@@ -41,13 +97,17 @@ exports.getAllSubmissions = async (req, res) => {
     } = req.query;
     
     const query = {};
-    
-    // Multi-tenancy: Filter by userId if authenticated
-    if (req.userId) {
-      query.userId = req.userId;
+    const accessibleFormIds = await getAccessibleFormIds(req);
+
+    if (formId) {
+      if (!accessibleFormIds.includes(formId)) {
+        return unauthorizedResponse(res, 'You do not have access to this form');
+      }
+      query.formId = formId;
+    } else {
+      query.formId = { $in: accessibleFormIds };
     }
-    
-    if (formId) query.formId = formId;
+
     if (dateFrom || dateTo) {
       query.submittedAt = {};
       if (dateFrom) query.submittedAt.$gte = new Date(dateFrom);
@@ -76,19 +136,20 @@ exports.getAllSubmissions = async (req, res) => {
 // Get submission by ID
 exports.getSubmissionById = async (req, res) => {
   try {
-    const query = { submissionId: req.params.id };
-    
-    // Multi-tenancy: Filter by userId if authenticated
-    if (req.userId) {
-      query.userId = req.userId;
-    }
-    
-    const submission = await Submission.findOne(query);
-    
-    if (!submission) {
+    const { submission, error } = await getOwnedSubmissionById(
+      req.params.id,
+      req.userId,
+      req.user?.workspaceId
+    );
+
+    if (error?.type === 'not_found') {
       return notFoundResponse(res, 'Submission not found');
     }
-    
+
+    if (error?.type === 'unauthorized') {
+      return unauthorizedResponse(res, 'You do not have access to this submission');
+    }
+
     return successResponse(res, submission, 'Submission retrieved successfully');
   } catch (error) {
     return errorResponse(res, error.message || 'Failed to retrieve submission', 500);
@@ -119,16 +180,30 @@ exports.createSubmission = async (req, res) => {
       return notFoundResponse(res, 'Form not found');
     }
 
-    if (req.user?.workspaceId && form.workspaceId && form.workspaceId.toString() !== req.user.workspaceId.toString()) {
-      return unauthorizedResponse(res, 'You do not have access to this form');
-    }
+    const ownsForm = hasOwnedFormAccess(form, req.userId, req.user?.workspaceId);
+    const canSubmitPublishedForm = form.status?.isPublished === true;
 
-    if (!form.workspaceId && req.userId && form.userId && form.userId.toString() !== req.userId.toString()) {
+    if (!ownsForm && !canSubmitPublishedForm) {
       return unauthorizedResponse(res, 'You do not have access to this form');
     }
 
     if (form.settings?.requireAuthentication && !req.userId) {
       return unauthorizedResponse(res, 'Authentication is required to submit this form');
+    }
+
+    if (form.settings?.allowMultipleSubmissions === false) {
+      const duplicateQuery = { formId };
+
+      if (req.userId) {
+        duplicateQuery.userId = req.userId;
+      } else {
+        duplicateQuery['metadata.ipAddress'] = req.ip;
+      }
+
+      const existingSubmission = await Submission.findOne(duplicateQuery).select('submissionId submittedAt').lean();
+      if (existingSubmission) {
+        return conflictResponse(res, 'Multiple submissions are not allowed for this form');
+      }
     }
     
     const submission = new Submission({
@@ -141,11 +216,17 @@ exports.createSubmission = async (req, res) => {
         userAgent: metadata?.userAgent || req.get('User-Agent'),
         ipAddress: metadata?.ipAddress || req.ip,
         referrer: req.headers.referer || null,
-        formName: metadata?.formName
+        formName: metadata?.formName || form.name,
+        formType: metadata?.formType || form.type || form.schema?.formType || 'multi-section',
+        fieldCount: metadata?.fieldCount ?? form.schema?.sections?.reduce((total, section) => total + (section.fields?.length || 0), 0) ?? 0,
+        submissionMode: metadata?.submissionMode || metadata?.source || 'form-page',
+        submitterEmail: metadata?.submitterEmail || req.user?.email || null,
+        submittedBy: metadata?.submittedBy || req.user?.name || null
       }
     });
     
     await submission.save();
+    await syncFormSubmissionStatistics(formId);
     
     return createdResponse(res, submission, 'Submission created successfully');
   } catch (error) {
@@ -164,15 +245,22 @@ exports.updateSubmission = async (req, res) => {
     delete updateData.formId;
     delete updateData.submittedAt;
     
-    const query = { submissionId: id };
-    
-    // Multi-tenancy: Filter by userId if authenticated
-    if (req.userId) {
-      query.userId = req.userId;
+    const { submission: existingSubmission, error } = await getOwnedSubmissionById(
+      id,
+      req.userId,
+      req.user?.workspaceId
+    );
+
+    if (error?.type === 'not_found') {
+      return notFoundResponse(res, 'Submission not found');
     }
-    
+
+    if (error?.type === 'unauthorized') {
+      return unauthorizedResponse(res, 'You do not have access to this submission');
+    }
+
     const submission = await Submission.findOneAndUpdate(
-      query, 
+      { _id: existingSubmission._id },
       updateData, 
       { new: true, runValidators: true }
     );
@@ -191,17 +279,23 @@ exports.updateSubmission = async (req, res) => {
 exports.deleteSubmission = async (req, res) => {
   try {
     const { id } = req.params;
-    const query = { submissionId: id };
+    const { submission, error } = await getOwnedSubmissionById(
+      id,
+      req.userId,
+      req.user?.workspaceId
+    );
 
-    if (req.userId) {
-      query.userId = req.userId;
-    }
-
-    const submission = await Submission.findOneAndDelete(query);
-    
-    if (!submission) {
+    if (error?.type === 'not_found') {
       return notFoundResponse(res, 'Submission not found');
     }
+
+    if (error?.type === 'unauthorized') {
+      return unauthorizedResponse(res, 'You do not have access to this submission');
+    }
+
+    await Submission.findByIdAndDelete(submission._id);
+
+    await syncFormSubmissionStatistics(submission.formId);
     
     return successResponse(res, null, 'Submission deleted successfully');
   } catch (error) {
@@ -225,9 +319,6 @@ exports.getSubmissionsByForm = async (req, res) => {
     }
     
     const query = { formId };
-    if (req.userId) {
-      query.userId = req.userId;
-    }
     if (dateFrom || dateTo) {
       query.submittedAt = {};
       if (dateFrom) query.submittedAt.$gte = new Date(dateFrom);
@@ -268,9 +359,6 @@ exports.getSubmissionStats = async (req, res) => {
     }
     
     const query = { formId };
-    if (req.userId) {
-      query.userId = req.userId;
-    }
     
     const totalSubmissions = await Submission.countDocuments(query);
     const latestSubmission = await Submission.findOne(query).sort({ submittedAt: -1 });
@@ -304,9 +392,6 @@ exports.exportSubmissions = async (req, res) => {
     }
     
     const query = { formId };
-    if (req.userId) {
-      query.userId = req.userId;
-    }
     if (dateFrom || dateTo) {
       query.submittedAt = {};
       if (dateFrom) query.submittedAt.$gte = new Date(dateFrom);

@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   eslint: {
     // Existing codebase has historical lint debt; keep builds unblocked while we fix issues incrementally.
     ignoreDuringBuilds: true,

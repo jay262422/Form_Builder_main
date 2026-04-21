@@ -7,7 +7,7 @@ const AutoErrorMessage = ({ settings, onRetry, error }) => {
     <div className="text-center py-12">
       {/* Error Icon */}
       <div className="text-red-600 text-6xl mb-4">
-        {postSubmission.errorIcon || "⚠️"}
+        {postSubmission.errorIcon || "!"}
       </div>
       
       {/* Error Title */}
@@ -39,3 +39,4 @@ const AutoErrorMessage = ({ settings, onRetry, error }) => {
 };
 
 export default AutoErrorMessage;
+

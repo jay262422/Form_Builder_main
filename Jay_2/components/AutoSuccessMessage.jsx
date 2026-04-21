@@ -18,7 +18,7 @@ const AutoSuccessMessage = ({ settings, onResubmit, submittedData }) => {
     <div className="text-center py-12">
       {/* Success Icon */}
       <div className="text-green-600 text-6xl mb-4">
-        {postSubmission.successIcon || "✅"}
+        {postSubmission.successIcon || "OK"}
       </div>
       
       {/* Success Title */}
@@ -64,3 +64,4 @@ const AutoSuccessMessage = ({ settings, onResubmit, submittedData }) => {
 };
 
 export default AutoSuccessMessage;
+

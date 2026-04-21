@@ -62,8 +62,8 @@ class FileFormManager {
         showSubmittedData: false,
         allowResubmit: true,
         resubmitText: "Submit Another Request",
-        successIcon: "✅",
-        errorIcon: "⚠️",
+        successIcon: "OK",
+        errorIcon: "!",
         autoRedirect: {
           enabled: false,
           delay: 3000

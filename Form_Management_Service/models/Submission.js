@@ -32,6 +32,11 @@ const submissionSchema = new mongoose.Schema({
     userAgent: String,
     ipAddress: String,
     formName: String,
+    formType: String,
+    fieldCount: Number,
+    submissionMode: String,
+    submitterEmail: String,
+    submittedBy: String,
     referrer: String
   }
 }, {
@@ -44,6 +49,7 @@ submissionSchema.index({ userId: 1, submittedAt: -1 }); // User's submissions
 submissionSchema.index({ formId: 1, userId: 1 }); // User's submissions to specific form
 submissionSchema.index({ submissionId: 1 });
 submissionSchema.index({ 'metadata.formName': 1 });
+submissionSchema.index({ 'metadata.submitterEmail': 1 });
 
 // Pre-save middleware
 submissionSchema.pre('save', function(next) {

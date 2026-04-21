@@ -74,7 +74,8 @@ exports.getAllForms = async (req, res) => {
 exports.getFormByCustomId = async (req, res) => {
   try {
     const query = buildScopedFormQuery(req, { id: req.params.id });
-    if (!req.userId) {
+    const publicOnly = req.query.publicOnly === 'true';
+    if (!req.userId || publicOnly) {
       query['status.isPublished'] = true;
     }
     

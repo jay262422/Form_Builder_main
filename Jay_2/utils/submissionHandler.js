@@ -1,4 +1,5 @@
 import formSubmissionService from '../services/formSubmissionService';
+import { isStepByStepForm } from './formHelpers';
 
 /**
  * Auto-generates submission handler based on form settings
@@ -24,20 +25,21 @@ export const generateSubmissionHandler = (
       const formSchema = {
         id: formData.id,
         name: formData.name,
-        formType: 'multi-section',
+        formType: isStepByStepForm(formData) ? 'wizard' : 'multi-section',
         sections: formData.schema?.sections || formData.sections || []
       };
 
       // Check if custom API endpoint is configured
       const customEndpoint = formData.settings?.buttons?.submit?.customApiEndpoint;
       const customMethod = formData.settings?.buttons?.submit?.customApiMethod || 'POST';
+      const canUseCustomEndpoint = Boolean(customEndpoint) && !formData.status?.isPublished;
       
       console.log('Form settings:', formData.settings);
       console.log('Custom endpoint:', customEndpoint);
       console.log('Custom method:', customMethod);
       
       let result;
-      if (customEndpoint) {
+      if (canUseCustomEndpoint) {
         // Use custom API endpoint
         console.log(`Submitting to custom endpoint: ${customEndpoint}`);
         result = await submitToCustomEndpoint(data, customEndpoint, customMethod);
@@ -54,11 +56,21 @@ export const generateSubmissionHandler = (
         
         result = await formSubmissionService.submitForm(data, formSchema, {
           formName: formData.name,
-          formType: formData.type || 'builder',
+          formType: isStepByStepForm(formData) ? 'wizard' : (formData.type || 'builder'),
           source: 'form-page'
         });
         
         console.log('Form submission result:', result);
+      }
+
+      if (customEndpoint && !canUseCustomEndpoint) {
+        console.warn('Custom API endpoint ignored for published form to preserve platform submission rules.');
+      }
+
+      if (!result?.success) {
+        const errorMessage = result?.details || result?.error || formData.settings?.errorMessage || 'Failed to submit the form. Please try again.';
+        setError(errorMessage);
+        return result;
       }
 
       // Store submitted data if needed

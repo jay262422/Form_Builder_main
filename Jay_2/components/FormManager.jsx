@@ -9,7 +9,9 @@ import ThemeEditor from './editors/ThemeEditor';
 export default function FormManager({
   onEditForm,
   onViewForm,
+  onViewSubmissions,
   onCreateForm,
+  onFormsChanged,
   className = ""
 }) {
   const [forms, setForms] = useState([]);
@@ -99,7 +101,8 @@ export default function FormManager({
   const handleDeleteForm = async (formId) => {
     try {
       await fileFormManager.deleteForm(formId);
-      loadForms();
+      await loadForms();
+      await onFormsChanged?.();
       setShowDeleteConfirm(false);
       setSelectedForm(null);
     } catch (error) {
@@ -113,7 +116,8 @@ export default function FormManager({
     try {
       // Use the dedicated duplicate method
       await fileFormManager.duplicateForm(formId);
-      loadForms();
+      await loadForms();
+      await onFormsChanged?.();
     } catch (error) {
       // Error feedback handled by parent
       throw error;
@@ -136,7 +140,8 @@ export default function FormManager({
         updatedAt: new Date().toISOString()
       });
       
-      loadForms();
+      await loadForms();
+      await onFormsChanged?.();
     } catch (error) {
       // Error feedback handled by parent
       throw error;
@@ -307,6 +312,8 @@ export default function FormManager({
 
       setHasUnsavedChanges(false);
       setIsEditingMetadata(false);
+      await loadForms();
+      await onFormsChanged?.();
     } catch (error) {
       console.error('Error saving settings:', error);
       // Revert on error
@@ -321,6 +328,31 @@ export default function FormManager({
       ...updates
     }));
     setHasUnsavedChanges(true);
+  };
+
+  const updatePendingPostSubmissionSettings = (updates) => {
+    const currentPostSubmission = pendingSettings?.postSubmission || {};
+    updatePendingSettings({
+      postSubmission: {
+        ...currentPostSubmission,
+        ...updates
+      }
+    });
+  };
+
+  const updatePendingAutoRedirectSettings = (updates) => {
+    const currentPostSubmission = pendingSettings?.postSubmission || {};
+    const currentAutoRedirect = currentPostSubmission.autoRedirect || {};
+
+    updatePendingSettings({
+      postSubmission: {
+        ...currentPostSubmission,
+        autoRedirect: {
+          ...currentAutoRedirect,
+          ...updates
+        }
+      }
+    });
   };
 
   // Handle export forms
@@ -359,7 +391,8 @@ export default function FormManager({
           });
         }
         
-        loadForms();
+        await loadForms();
+        await onFormsChanged?.();
         // Success feedback handled by parent
       } catch (error) {
         // Error feedback handled by parent
@@ -371,6 +404,21 @@ export default function FormManager({
   // Format date
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString();
+  };
+
+  const getPublishedFormLink = (form) => {
+    if (!form?.id) return '';
+    if (typeof window === 'undefined') return `/forms/${encodeURIComponent(form.id)}`;
+    return `${window.location.origin}/forms/${encodeURIComponent(form.id)}`;
+  };
+
+  const handleCopyLink = async (value) => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch (error) {
+      console.error('Failed to copy published link:', error);
+    }
   };
 
   // Get form stats
@@ -616,6 +664,12 @@ export default function FormManager({
                           Preview
                         </button>
                         <button
+                          onClick={() => onViewSubmissions?.(form)}
+                          className="px-3 py-1 text-sm bg-slate-700 text-white rounded hover:bg-slate-800 transition-colors"
+                        >
+                          Submissions
+                        </button>
+                        <button
                           onClick={async () => {
                             try {
                               // Fetch full form data via API just like Edit button
@@ -843,6 +897,35 @@ export default function FormManager({
                         />
                         <span className="text-sm text-gray-700">Template (Can be used as a starting point for new forms)</span>
                       </label>
+                      {selectedForm.status?.isPublished && (
+                        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700 mb-1">
+                            Published Link
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              value={getPublishedFormLink(selectedForm)}
+                              className="flex-1 px-2 py-1 text-xs border border-emerald-300 rounded bg-white text-emerald-800"
+                            />
+                            <button
+                              onClick={() => handleCopyLink(getPublishedFormLink(selectedForm))}
+                              className="px-2 py-1 text-xs font-medium bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                            >
+                              Copy
+                            </button>
+                          </div>
+                          <p className="text-xs text-emerald-700 mt-2">
+                            Share this URL to open the published form directly.
+                          </p>
+                          {hasUnsavedChanges && (
+                            <p className="text-xs text-amber-700 mt-1">
+                              Save settings to make sure publication changes are applied.
+                            </p>
+                          )}
+                        </div>
+                      )}
                    </div>
                  </div>
 
@@ -1087,391 +1170,134 @@ export default function FormManager({
                  </div>
 
                  {/* Post-Submission Settings */}
-                 <div>
-                   <h4 className="text-md font-medium text-gray-900 mb-3">Post-Submission Behavior</h4>
-                   <div className="space-y-4">
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                       <label className="flex items-center space-x-3 cursor-pointer">
-                         <input
-                           type="checkbox"
-                           checked={selectedForm.settings?.postSubmission?.showSuccessPage !== false}
-                                                    onChange={async (e) => {
-                           try {
-                             const currentPostSubmission = selectedForm.settings?.postSubmission || {};
-                             const newSettings = {
-                               ...selectedForm.settings,
-                               postSubmission: {
-                                 ...currentPostSubmission,
-                                 showSuccessPage: e.target.checked
-                               }
-                             };
-                             
-                             // Update local state immediately for better UX
-                             setSelectedForm({
-                               ...selectedForm,
-                               settings: newSettings
-                             });
-                             
-                             // Update in forms list
-                             setForms(prevForms => 
-                               prevForms.map(form => 
-                                 form.id === selectedForm.id 
-                                   ? { ...form, settings: newSettings }
-                                   : form
-                               )
-                             );
-                             
-                             // Save to backend
-                             await fileFormManager.updateForm(selectedForm.id, {
-                               settings: newSettings
-                             });
-                           } catch (error) {
-                             console.error('Error updating post-submission settings:', error);
-                             // Revert on error
-                             loadForms();
-                           }
-                         }}
-                           className="w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2"
-                         />
-                         <span className="text-sm text-gray-700">Show success page after submission</span>
-                       </label>
-                       <label className="flex items-center space-x-3 cursor-pointer">
-                         <input
-                           type="checkbox"
-                           checked={selectedForm.settings?.postSubmission?.showSubmittedData || false}
-                                                    onChange={async (e) => {
-                           try {
-                             const currentPostSubmission = selectedForm.settings?.postSubmission || {};
-                             const newSettings = {
-                               ...selectedForm.settings,
-                               postSubmission: {
-                                 ...currentPostSubmission,
-                                 showSubmittedData: e.target.checked
-                               }
-                             };
-                             
-                             // Update local state immediately for better UX
-                             setSelectedForm({
-                               ...selectedForm,
-                               settings: newSettings
-                             });
-                             
-                             // Update in forms list
-                             setForms(prevForms => 
-                               prevForms.map(form => 
-                                 form.id === selectedForm.id 
-                                   ? { ...form, settings: newSettings }
-                                   : form
-                               )
-                             );
-                             
-                             // Save to backend
-                             await fileFormManager.updateForm(selectedForm.id, {
-                               settings: newSettings
-                             });
-                           } catch (error) {
-                             console.error('Error updating post-submission settings:', error);
-                             // Revert on error
-                             loadForms();
-                           }
-                         }}
-                           className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-                         />
-                         <span className="text-sm text-gray-700">Show submitted data to user</span>
-                       </label>
-                       <label className="flex items-center space-x-3 cursor-pointer">
-                         <input
-                           type="checkbox"
-                           checked={selectedForm.settings?.postSubmission?.allowResubmit || false}
-                                                    onChange={async (e) => {
-                           try {
-                             const currentPostSubmission = selectedForm.settings?.postSubmission || {};
-                             const newSettings = {
-                               ...selectedForm.settings,
-                               postSubmission: {
-                                 ...currentPostSubmission,
-                                 allowResubmit: e.target.checked
-                               }
-                             };
-                             
-                             // Update local state immediately for better UX
-                             setSelectedForm({
-                               ...selectedForm,
-                               settings: newSettings
-                             });
-                             
-                             // Update in forms list
-                             setForms(prevForms => 
-                               prevForms.map(form => 
-                                 form.id === selectedForm.id 
-                                   ? { ...form, settings: newSettings }
-                                   : form
-                               )
-                             );
-                             
-                             // Save to backend
-                             await fileFormManager.updateForm(selectedForm.id, {
-                               settings: newSettings
-                             });
-                           } catch (error) {
-                             console.error('Error updating post-submission settings:', error);
-                             // Revert on error
-                             loadForms();
-                           }
-                         }}
-                           className="w-5 h-5 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
-                         />
-                         <span className="text-sm text-gray-700">Allow user to submit again</span>
-                       </label>
-                       <label className="flex items-center space-x-3 cursor-pointer">
-                         <input
-                           type="checkbox"
-                           checked={selectedForm.settings?.postSubmission?.autoRedirect?.enabled || false}
-                                                    onChange={async (e) => {
-                           try {
-                             const currentPostSubmission = selectedForm.settings?.postSubmission || {};
-                             const currentAutoRedirect = currentPostSubmission.autoRedirect || {};
-                             const newSettings = {
-                               ...selectedForm.settings,
-                               postSubmission: {
-                                 ...currentPostSubmission,
-                                 autoRedirect: {
-                                   ...currentAutoRedirect,
-                                   enabled: e.target.checked
-                                 }
-                               }
-                             };
-                             
-                             // Update local state immediately for better UX
-                             setSelectedForm({
-                               ...selectedForm,
-                               settings: newSettings
-                             });
-                             
-                             // Update in forms list
-                             setForms(prevForms => 
-                               prevForms.map(form => 
-                                 form.id === selectedForm.id 
-                                   ? { ...form, settings: newSettings }
-                                   : form
-                               )
-                             );
-                             
-                             // Save to backend
-                             await fileFormManager.updateForm(selectedForm.id, {
-                               settings: newSettings
-                             });
-                           } catch (error) {
-                             console.error('Error updating post-submission settings:', error);
-                             // Revert on error
-                             loadForms();
-                           }
-                         }}
-                           className="w-5 h-5 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 focus:ring-2"
-                         />
-                         <span className="text-sm text-gray-700">Auto-redirect after submission</span>
-                       </label>
-                     </div>
-                     
-                     {/* Conditional fields based on checkboxes */}
-                     {selectedForm.settings?.postSubmission?.allowResubmit && (
-                       <div>
-                         <label className="block text-sm font-medium text-gray-700 mb-1">Resubmit Button Text</label>
-                         <input
-                           type="text"
-                           value={selectedForm.settings?.postSubmission?.resubmitText || "Submit Another Request"}
-                           onChange={async (e) => {
-                             try {
-                               const currentPostSubmission = selectedForm.settings?.postSubmission || {};
-                               const newSettings = {
-                                 ...selectedForm.settings,
-                                 postSubmission: {
-                                   ...currentPostSubmission,
-                                   resubmitText: e.target.value
-                                 }
-                               };
-                               
-                               // Update local state immediately for better UX
-                               setSelectedForm({
-                                 ...selectedForm,
-                                 settings: newSettings
-                               });
-                               
-                               // Update in forms list
-                               setForms(prevForms => 
-                                 prevForms.map(form => 
-                                   form.id === selectedForm.id 
-                                     ? { ...form, settings: newSettings }
-                                     : form
-                                 )
-                               );
-                               
-                               // Save to backend
-                               await fileFormManager.updateForm(selectedForm.id, {
-                                 settings: newSettings
-                               });
-                             } catch (error) {
-                               console.error('Error updating post-submission settings:', error);
-                               // Revert on error
-                               loadForms();
-                             }
-                           }}
-                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                           placeholder="Submit Another Request"
-                         />
-                       </div>
-                     )}
-                     
-                     {selectedForm.settings?.postSubmission?.autoRedirect?.enabled && (
-                       <div>
-                         <label className="block text-sm font-medium text-gray-700 mb-1">Auto-redirect Delay (seconds)</label>
-                         <input
-                           type="number"
-                           min="1"
-                           max="30"
-                           value={Math.round((selectedForm.settings?.postSubmission?.autoRedirect?.delay || 3000) / 1000)}
-                           onChange={async (e) => {
-                             try {
-                               const currentPostSubmission = selectedForm.settings?.postSubmission || {};
-                               const currentAutoRedirect = currentPostSubmission.autoRedirect || {};
-                               const newSettings = {
-                                 ...selectedForm.settings,
-                                 postSubmission: {
-                                   ...currentPostSubmission,
-                                   autoRedirect: {
-                                     ...currentAutoRedirect,
-                                     delay: parseInt(e.target.value) * 1000
-                                   }
-                                 }
-                               };
-                               
-                               // Update local state immediately for better UX
-                               setSelectedForm({
-                                 ...selectedForm,
-                                 settings: newSettings
-                               });
-                               
-                               // Update in forms list
-                               setForms(prevForms => 
-                                 prevForms.map(form => 
-                                   form.id === selectedForm.id 
-                                     ? { ...form, settings: newSettings }
-                                     : form
-                                 )
-                               );
-                               
-                               // Save to backend
-                               await fileFormManager.updateForm(selectedForm.id, {
-                                 settings: newSettings
-                               });
-                             } catch (error) {
-                               console.error('Error updating post-submission settings:', error);
-                               // Revert on error
-                               loadForms();
-                             }
-                           }}
-                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                           placeholder="3"
-                         />
-                       </div>
-                     )}
-                     
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                       <div>
-                         <label className="block text-sm font-medium text-gray-700 mb-1">Success Icon</label>
-                         <input
-                           type="text"
-                           value={selectedForm.settings?.postSubmission?.successIcon || "✅"}
-                           onChange={async (e) => {
-                             try {
-                               const currentPostSubmission = selectedForm.settings?.postSubmission || {};
-                               const newSettings = {
-                                 ...selectedForm.settings,
-                                 postSubmission: {
-                                   ...currentPostSubmission,
-                                   successIcon: e.target.value
-                                 }
-                               };
-                               
-                               // Update local state immediately for better UX
-                               setSelectedForm({
-                                 ...selectedForm,
-                                 settings: newSettings
-                               });
-                               
-                               // Update in forms list
-                               setForms(prevForms => 
-                                 prevForms.map(form => 
-                                   form.id === selectedForm.id 
-                                     ? { ...form, settings: newSettings }
-                                     : form
-                                 )
-                               );
-                               
-                               // Save to backend
-                               await fileFormManager.updateForm(selectedForm.id, {
-                                 settings: newSettings
-                               });
-                             } catch (error) {
-                               console.error('Error updating post-submission settings:', error);
-                               // Revert on error
-                               loadForms();
-                             }
-                           }}
-                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                           placeholder="✅"
-                         />
-                       </div>
-                       <div>
-                         <label className="block text-sm font-medium text-gray-700 mb-1">Error Icon</label>
-                         <input
-                           type="text"
-                           value={selectedForm.settings?.postSubmission?.errorIcon || "⚠️"}
-                           onChange={async (e) => {
-                             try {
-                               const currentPostSubmission = selectedForm.settings?.postSubmission || {};
-                               const newSettings = {
-                                 ...selectedForm.settings,
-                                 postSubmission: {
-                                   ...currentPostSubmission,
-                                   errorIcon: e.target.value
-                                 }
-                               };
-                               
-                               // Update local state immediately for better UX
-                               setSelectedForm({
-                                 ...selectedForm,
-                                 settings: newSettings
-                               });
-                               
-                               // Update in forms list
-                               setForms(prevForms => 
-                                 prevForms.map(form => 
-                                   form.id === selectedForm.id 
-                                     ? { ...form, settings: newSettings }
-                                     : form
-                                 )
-                               );
-                               
-                               // Save to backend
-                               await fileFormManager.updateForm(selectedForm.id, {
-                                 settings: newSettings
-                               });
-                             } catch (error) {
-                               console.error('Error updating post-submission settings:', error);
-                               // Revert on error
-                               loadForms();
-                             }
-                           }}
-                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                           placeholder="⚠️"
-                         />
-                       </div>
-                     </div>
-                   </div>
-                 </div>
+                  <div>
+                    <h4 className="text-md font-medium text-gray-900 mb-3">Post-Submission Behavior</h4>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <label className="flex items-center space-x-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={pendingSettings?.postSubmission?.showSuccessPage !== false}
+                            onChange={(e) => {
+                              updatePendingPostSubmissionSettings({
+                                showSuccessPage: e.target.checked
+                              });
+                            }}
+                            className="w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2"
+                          />
+                          <span className="text-sm text-gray-700">Show success page after submission</span>
+                        </label>
+                        <label className="flex items-center space-x-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={pendingSettings?.postSubmission?.showSubmittedData || false}
+                            onChange={(e) => {
+                              updatePendingPostSubmissionSettings({
+                                showSubmittedData: e.target.checked
+                              });
+                            }}
+                            className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                          />
+                          <span className="text-sm text-gray-700">Show submitted data to user</span>
+                        </label>
+                        <label className="flex items-center space-x-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={pendingSettings?.postSubmission?.allowResubmit || false}
+                            onChange={(e) => {
+                              updatePendingPostSubmissionSettings({
+                                allowResubmit: e.target.checked
+                              });
+                            }}
+                            className="w-5 h-5 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
+                          />
+                          <span className="text-sm text-gray-700">Allow user to submit again</span>
+                        </label>
+                        <label className="flex items-center space-x-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={pendingSettings?.postSubmission?.autoRedirect?.enabled || false}
+                            onChange={(e) => {
+                              updatePendingAutoRedirectSettings({
+                                enabled: e.target.checked
+                              });
+                            }}
+                            className="w-5 h-5 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 focus:ring-2"
+                          />
+                          <span className="text-sm text-gray-700">Auto-redirect after submission</span>
+                        </label>
+                      </div>
+                      
+                      {pendingSettings?.postSubmission?.allowResubmit && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Resubmit Button Text</label>
+                          <input
+                            type="text"
+                            value={pendingSettings?.postSubmission?.resubmitText || "Submit Another Request"}
+                            onChange={(e) => {
+                              updatePendingPostSubmissionSettings({
+                                resubmitText: e.target.value
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Submit Another Request"
+                          />
+                        </div>
+                      )}
+                      
+                      {pendingSettings?.postSubmission?.autoRedirect?.enabled && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Auto-redirect Delay (seconds)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="30"
+                            value={Math.round((pendingSettings?.postSubmission?.autoRedirect?.delay || 3000) / 1000)}
+                            onChange={(e) => {
+                              updatePendingAutoRedirectSettings({
+                                delay: Number.parseInt(e.target.value || '0', 10) * 1000
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="3"
+                          />
+                        </div>
+                      )}
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Success Icon</label>
+                          <input
+                            type="text"
+                            value={pendingSettings?.postSubmission?.successIcon || "OK"}
+                            onChange={(e) => {
+                              updatePendingPostSubmissionSettings({
+                                successIcon: e.target.value
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="OK"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Error Icon</label>
+                          <input
+                            type="text"
+                            value={pendingSettings?.postSubmission?.errorIcon || "!"}
+                            onChange={(e) => {
+                              updatePendingPostSubmissionSettings({
+                                errorIcon: e.target.value
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="!"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
-                 {/* Form Statistics */}
+                  {/* Form Statistics */}
                  <div>
                    <h4 className="text-md font-medium text-gray-900 mb-3">Form Statistics</h4>
                    <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1551,9 +1377,9 @@ export default function FormManager({
        )}
 
        {/* Theme Editor Modal */}
-       {showThemeEditor && selectedFormForTheme && (
-         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-           <div className="w-full h-full max-w-[95vw] max-h-[95vh] overflow-hidden">
+        {showThemeEditor && selectedFormForTheme && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="w-full h-full max-w-[95vw] max-h-[95vh] overflow-hidden">
                            <ThemeEditor
                 initialTheme={selectedFormForTheme.ui_part}
                onSave={async (uiConfig) => {
@@ -1570,15 +1396,16 @@ export default function FormManager({
                    });
                    
                    // Update local state
-                   setForms(prevForms => 
-                     prevForms.map(form => 
-                       form.id === selectedFormForTheme.id 
-                         ? updatedForm
-                         : form
-                     )
-                   );
-                   
-                   setShowThemeEditor(false);
+                    setForms(prevForms => 
+                      prevForms.map(form => 
+                        form.id === selectedFormForTheme.id 
+                          ? updatedForm
+                          : form
+                      )
+                    );
+                    await onFormsChanged?.();
+                    
+                    setShowThemeEditor(false);
                    setSelectedFormForTheme(null);
                  } catch (error) {
                    console.error('Error saving theme:', error);
@@ -1591,9 +1418,10 @@ export default function FormManager({
                }}
                currentForm={selectedFormForTheme}
              />
-           </div>
-         </div>
-       )}
-    </div>
+            </div>
+          </div>
+        )}
+     </div>
   );
 } 
+

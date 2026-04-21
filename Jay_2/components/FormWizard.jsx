@@ -1,5 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import FormBuilder from '../FormBuilder';
+import FormValidator from '../utils/FormValidator';
 
 /**
  * FormWizard - Step-by-step form with progress indicator and modern UI
@@ -25,7 +26,7 @@ export default function FormWizard({
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState(initialData);
   const [errors, setErrors] = useState({});
-  const [touched, setTouched] = useState({});
+  const validator = useMemo(() => new FormValidator(validationRules), [validationRules]);
 
   // Split schema into steps (each section becomes a step)
   const steps = schema.map((section, index) => ({
@@ -46,10 +47,19 @@ export default function FormWizard({
   }, [totalSteps]);
 
   const nextStep = useCallback(() => {
+    const stepErrors = getCurrentStepErrors();
+    if (Object.keys(stepErrors).length > 0) {
+      setErrors((prevErrors) => ({
+        ...prevErrors,
+        ...stepErrors
+      }));
+      return;
+    }
+
     if (currentStep < totalSteps - 1) {
       setCurrentStep(currentStep + 1);
     }
-  }, [currentStep, totalSteps]);
+  }, [currentStep, totalSteps, formData, validator, steps]);
 
   const prevStep = useCallback(() => {
     if (currentStep > 0) {
@@ -64,10 +74,24 @@ export default function FormWizard({
 
   // Handle form submission
   const handleSubmit = useCallback(async (finalFormData) => {
+    const validationErrors = validator.validateForm(finalFormData, schema);
+    setErrors(validationErrors);
+
+    if (Object.keys(validationErrors).length > 0) {
+      const firstInvalidStep = steps.findIndex((step) => (
+        (step.section?.fields || []).some((field) => validationErrors[field.name])
+      ));
+
+      if (firstInvalidStep >= 0) {
+        setCurrentStep(firstInvalidStep);
+      }
+      return;
+    }
+
     if (onSubmit) {
       await onSubmit(finalFormData);
     }
-  }, [onSubmit]);
+  }, [onSubmit, schema, steps, validator]);
 
   // Handle form cancellation
   const handleCancel = useCallback(() => {
@@ -76,17 +100,24 @@ export default function FormWizard({
     }
   }, [onCancel]);
 
-  // Check if current step is valid
-  const isCurrentStepValid = () => {
+  const getCurrentStepErrors = () => {
     const currentSection = steps[currentStep].section;
     const sectionFields = currentSection.fields || [];
-    
-    // Check if all required fields in current step are filled
-    return sectionFields.every(field => {
-      if (!field.required) return true;
-      const value = formData[field.name];
-      return value !== null && value !== undefined && value !== '';
+
+    const stepErrors = {};
+    sectionFields.forEach((field) => {
+      const fieldError = validator.validateField(field.name, formData[field.name], field, formData);
+      if (fieldError) {
+        stepErrors[field.name] = fieldError;
+      }
     });
+
+    return stepErrors;
+  };
+
+  // Check if current step is valid
+  const isCurrentStepValid = () => {
+    return Object.keys(getCurrentStepErrors()).length === 0;
   };
 
   // Calculate progress percentage
@@ -197,7 +228,7 @@ export default function FormWizard({
                       onClick={prevStep}
                       className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200"
                     >
-                      ← Previous
+                      Previous
                     </button>
                   )}
                 </div>
@@ -209,7 +240,7 @@ export default function FormWizard({
                       disabled={!isCurrentStepValid()}
                       className="px-6 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
                     >
-                      Continue →
+                      Continue
                     </button>
                   ) : (
                     buttonConfig.submit?.show !== false && (
@@ -249,3 +280,4 @@ export default function FormWizard({
     </div>
   );
 } 
+

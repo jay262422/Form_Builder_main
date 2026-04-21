@@ -1,0 +1,12 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/forgot-password/page": "app/forgot-password/page.js",
+  "/forms/[id]/page": "app/forms/[id]/page.js",
+  "/login/page": "app/login/page.js",
+  "/page": "app/page.js",
+  "/register/page": "app/register/page.js",
+  "/reset-password/page": "app/reset-password/page.js",
+  "/theme-editor-demo/page": "app/theme-editor-demo/page.js",
+  "/settings/page": "app/settings/page.js",
+  "/verify-email/page": "app/verify-email/page.js"
+}

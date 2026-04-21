@@ -18,7 +18,8 @@ export default function VisualFormBuilder({
   className = "",
   isStandalone = true,
   onSave,
-  onCancel
+  onCancel,
+  onDirtyChange
 }) {
   const [schema, setSchema] = useState(() => {
     // Handle both old and new schema formats for initial state
@@ -44,6 +45,10 @@ export default function VisualFormBuilder({
   const [showFieldProperties, setShowFieldProperties] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [dynamicModalKey, setDynamicModalKey] = useState(0);
+  const [rightPanelTab, setRightPanelTab] = useState('properties');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [lastDraftSavedAt, setLastDraftSavedAt] = useState(null);
+  const autosaveTimeoutRef = React.useRef(null);
 
   // Form type selection
   const [formType, setFormType] = useState(() => {
@@ -72,6 +77,11 @@ export default function VisualFormBuilder({
   
   // Use shared theme configurations
   const themeConfigs = builderThemeConfigs;
+
+  const formDraftStorageKey = useMemo(() => {
+    const formId = initialSchema?.id || initialSchema?._id || 'new';
+    return `form_builder_draft_${formId}`;
+  }, [initialSchema]);
 
   // ✅ Helper functions moved to top to avoid circular dependency
   // Helper function to ensure correct field structure before saving
@@ -170,6 +180,7 @@ return mappingData[parentValue] || [];`;
   // Handle form type change
   const handleFormTypeChange = (newFormType) => {
     setFormType(newFormType);
+    markDirty();
     // Notify parent of schema change with new form type
     if (onSchemaChange) {
       onSchemaChange({ formType: newFormType, formTheme, sections: schema });
@@ -179,6 +190,7 @@ return mappingData[parentValue] || [];`;
   // Handle theme change
   const handleThemeChange = (newTheme) => {
     setFormTheme(newTheme);
+    markDirty();
     // Notify parent of theme change
     if (onSchemaChange) {
       onSchemaChange({ formType, formTheme: newTheme, sections: schema });
@@ -237,6 +249,89 @@ return mappingData[parentValue] || [];`;
       }
     }
   }, [initialSchema]);
+
+  React.useEffect(() => {
+    setHasUnsavedChanges(false);
+    setLastDraftSavedAt(null);
+  }, [initialSchema]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!formDraftStorageKey) return;
+
+    const rawDraft = window.localStorage.getItem(formDraftStorageKey);
+    if (!rawDraft) return;
+
+    try {
+      const draft = JSON.parse(rawDraft);
+      if (!draft || !Array.isArray(draft.schema)) return;
+
+      const shouldRestore = window.confirm('A saved local draft was found for this form. Restore it now?');
+      if (!shouldRestore) {
+        window.localStorage.removeItem(formDraftStorageKey);
+        return;
+      }
+
+      setSchema(draft.schema || []);
+      if (draft.formType) setFormType(draft.formType);
+      if (draft.formTheme) setFormTheme(draft.formTheme);
+      if (typeof draft.formName === 'string') setFormName(draft.formName);
+      if (typeof draft.formDescription === 'string') setFormDescription(draft.formDescription);
+      setHasUnsavedChanges(true);
+      setLastDraftSavedAt(draft.savedAt || null);
+    } catch (error) {
+      console.warn('Failed to parse local draft:', error);
+    }
+  }, [formDraftStorageKey]);
+
+  React.useEffect(() => {
+    onDirtyChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onDirtyChange]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!hasUnsavedChanges) return;
+
+    const beforeUnloadHandler = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+      return '';
+    };
+
+    window.addEventListener('beforeunload', beforeUnloadHandler);
+    return () => {
+      window.removeEventListener('beforeunload', beforeUnloadHandler);
+    };
+  }, [hasUnsavedChanges]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!hasUnsavedChanges) return;
+
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+    }
+
+    autosaveTimeoutRef.current = setTimeout(() => {
+      const payload = {
+        schema,
+        formType,
+        formTheme,
+        formName,
+        formDescription,
+        savedAt: new Date().toISOString()
+      };
+
+      window.localStorage.setItem(formDraftStorageKey, JSON.stringify(payload));
+      setLastDraftSavedAt(payload.savedAt);
+    }, 1000);
+
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+      }
+    };
+  }, [schema, formType, formTheme, formName, formDescription, hasUnsavedChanges, formDraftStorageKey]);
 
   // Available field types - ALL 25 field types available
   const fieldTypes = [
@@ -659,6 +754,35 @@ return mappingData[parentValue] || [];`;
     }
   };
 
+  const selectedFieldContext = useMemo(() => {
+    if (!selectedField) return null;
+
+    const [sectionRaw, fieldRaw] = String(selectedField).split('-');
+    const sectionIndex = parseInt(sectionRaw, 10);
+    const fieldIndex = parseInt(fieldRaw, 10);
+
+    if (Number.isNaN(sectionIndex) || Number.isNaN(fieldIndex)) {
+      return null;
+    }
+
+    const section = schema[sectionIndex];
+    const field = section?.fields?.[fieldIndex];
+    if (!field) {
+      return null;
+    }
+
+    return {
+      sectionIndex,
+      fieldIndex,
+      section,
+      field
+    };
+  }, [schema, selectedField]);
+
+  const markDirty = () => {
+    setHasUnsavedChanges(true);
+  };
+
 
 
 
@@ -671,11 +795,12 @@ return mappingData[parentValue] || [];`;
     };
     const newSchema = [...schema, newSection];
     setSchema(newSchema);
+    markDirty();
     
     // ✅ Notify parent with prepared schema
     const preparedSchema = prepareSchemaForSave(newSchema);
-    onSchemaChange?.({ formType, sections: preparedSchema });
-  }, [schema, onSchemaChange, prepareSchemaForSave]);
+    onSchemaChange?.({ formType, formTheme, sections: preparedSchema });
+  }, [schema, onSchemaChange, prepareSchemaForSave, formType, formTheme]);
 
   // Handle adding a field to a section
   const addField = useCallback((sectionIndex, fieldType) => {
@@ -692,35 +817,69 @@ return mappingData[parentValue] || [];`;
       newSchema[sectionIndex].fields = [];
     }
     newSchema[sectionIndex].fields.push(newField);
+    const newFieldIndex = newSchema[sectionIndex].fields.length - 1;
     
     setSchema(newSchema);
+    markDirty();
+    setSelectedField(`${sectionIndex}-${newFieldIndex}`);
+    setRightPanelTab('properties');
     
     // ✅ Notify parent with prepared schema
     const preparedSchema = prepareSchemaForSave(newSchema);
-    onSchemaChange?.({ formType, sections: preparedSchema });
-  }, [schema, fieldTypes, onSchemaChange, formType, prepareSchemaForSave]);
+    onSchemaChange?.({ formType, formTheme, sections: preparedSchema });
+  }, [schema, fieldTypes, onSchemaChange, formType, formTheme, prepareSchemaForSave]);
 
   // Handle removing a field
   const removeField = useCallback((sectionIndex, fieldIndex) => {
     const newSchema = [...schema];
     newSchema[sectionIndex].fields.splice(fieldIndex, 1);
     setSchema(newSchema);
+    markDirty();
+    setSelectedField((current) => {
+      if (!current) return null;
+      const [currentSection, currentField] = String(current).split('-').map((value) => parseInt(value, 10));
+      if (currentSection !== sectionIndex || Number.isNaN(currentField)) {
+        return current;
+      }
+      if (currentField === fieldIndex) {
+        return null;
+      }
+      if (currentField > fieldIndex) {
+        return `${sectionIndex}-${currentField - 1}`;
+      }
+      return current;
+    });
     
     // ✅ Notify parent with prepared schema
     const preparedSchema = prepareSchemaForSave(newSchema);
-    onSchemaChange?.({ formType, sections: preparedSchema });
-  }, [schema, onSchemaChange, prepareSchemaForSave]);
+    onSchemaChange?.({ formType, formTheme, sections: preparedSchema });
+  }, [schema, onSchemaChange, prepareSchemaForSave, formType, formTheme]);
 
   // Handle removing a section
   const removeSection = useCallback((sectionIndex) => {
     const newSchema = [...schema];
     newSchema.splice(sectionIndex, 1);
     setSchema(newSchema);
+    markDirty();
+    setSelectedField((current) => {
+      if (!current) return null;
+      const [currentSection, currentField] = String(current).split('-').map((value) => parseInt(value, 10));
+      if (Number.isNaN(currentSection) || Number.isNaN(currentField)) {
+        return null;
+      }
+      if (currentSection === sectionIndex) {
+        return null;
+      }
+      if (currentSection > sectionIndex) {
+        return `${currentSection - 1}-${currentField}`;
+      }
+      return current;
+    });
     
     // ✅ Notify parent with prepared schema
     const preparedSchema = prepareSchemaForSave(newSchema);
-    onSchemaChange?.({ formType, sections: preparedSchema });
-  }, [schema, onSchemaChange, prepareSchemaForSave]);
+    onSchemaChange?.({ formType, formTheme, sections: preparedSchema });
+  }, [schema, onSchemaChange, prepareSchemaForSave, formType, formTheme]);
 
   // Handle updating field properties
   const updateField = useCallback((sectionIndex, fieldIndex, updates) => {
@@ -736,11 +895,12 @@ return mappingData[parentValue] || [];`;
     
     // Force React to recognize the state change
     setSchema([...newSchema]);
+    markDirty();
     
     // ✅ Notify parent with prepared schema
     const preparedSchema = prepareSchemaForSave(newSchema);
-    onSchemaChange?.({ formType, sections: preparedSchema });
-  }, [schema, onSchemaChange, formType, prepareSchemaForSave]);
+    onSchemaChange?.({ formType, formTheme, sections: preparedSchema });
+  }, [schema, onSchemaChange, formType, formTheme, prepareSchemaForSave]);
 
   // Handle options change
   const handleOptionsChange = useCallback((newOptions) => {
@@ -829,13 +989,19 @@ return mappingData[parentValue] || [];`;
         setFormDescription('');
         // Success feedback handled by parent
       }
+
+      if (typeof window !== 'undefined' && formDraftStorageKey) {
+        window.localStorage.removeItem(formDraftStorageKey);
+      }
+      setLastDraftSavedAt(null);
+      setHasUnsavedChanges(false);
     } catch (error) {
       // Error feedback handled by parent
       throw error;
     } finally {
       setIsSaving(false);
     }
-  }, [schema, formName, formDescription, onSave, isStandalone, prepareSchemaForSave]);
+  }, [schema, formName, formDescription, onSave, isStandalone, prepareSchemaForSave, formType, formTheme, formDraftStorageKey]);
 
   // Handle updating section properties
   const updateSection = useCallback((sectionIndex, updates) => {
@@ -845,6 +1011,7 @@ return mappingData[parentValue] || [];`;
       ...updates
     };
     setSchema(newSchema);
+    markDirty();
     
     // ✅ Notify parent with prepared schema
     const preparedSchema = prepareSchemaForSave(newSchema);
@@ -1735,6 +1902,146 @@ return mappingData[parentValue] || [];`;
     );
   };
 
+  const renderSelectedFieldPanel = () => {
+    if (!selectedFieldContext) {
+      return (
+        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600">
+          Select a field from the canvas to edit properties.
+        </div>
+      );
+    }
+
+    const { field, section, sectionIndex, fieldIndex } = selectedFieldContext;
+    const fieldTypeConfig = fieldTypes.find((ft) => ft.type === field.type);
+
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <div className="text-xs uppercase tracking-wide text-gray-500">Selected Field</div>
+          <div className="mt-1 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-gray-900">
+                {field.label || field.name || 'Untitled field'}
+              </div>
+              <div className="text-xs text-gray-500">
+                Section: {section?.title || `Section ${sectionIndex + 1}`}
+              </div>
+            </div>
+            <button
+              onClick={() => removeField(sectionIndex, fieldIndex)}
+              className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-200"
+            >
+              Remove
+            </button>
+          </div>
+          <div className="mt-2 inline-flex items-center rounded-full bg-white px-2 py-1 text-xs text-gray-600 border border-gray-200">
+            {fieldTypeConfig?.icon || 'Field'} {fieldTypeConfig?.label || field.type}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Field Name</label>
+            <input
+              type="text"
+              value={field.name || ''}
+              onChange={(e) => updateField(sectionIndex, fieldIndex, { name: e.target.value })}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Label</label>
+            <input
+              type="text"
+              value={field.label || ''}
+              onChange={(e) => updateField(sectionIndex, fieldIndex, { label: e.target.value })}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Placeholder</label>
+            <input
+              type="text"
+              value={field.placeholder || ''}
+              onChange={(e) => updateField(sectionIndex, fieldIndex, { placeholder: e.target.value })}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={field.required || false}
+              onChange={(e) => updateField(sectionIndex, fieldIndex, { required: e.target.checked })}
+            />
+            Required field
+          </label>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Help Text</label>
+            <input
+              type="text"
+              value={field.description || ''}
+              onChange={(e) => updateField(sectionIndex, fieldIndex, { description: e.target.value })}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              placeholder="Explain this field to users"
+            />
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-gray-200 p-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-2">Type Settings</div>
+          <div className="grid grid-cols-1 gap-2">
+            {renderFieldSpecificProperties(field, sectionIndex, fieldIndex)}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-gray-200 p-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-2">Validation</div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Min Length</label>
+              <input
+                type="number"
+                value={field.validation?.minLength || ''}
+                onChange={(e) => {
+                  const validation = { ...field.validation, minLength: e.target.value ? parseInt(e.target.value, 10) : undefined };
+                  updateField(sectionIndex, fieldIndex, { validation });
+                }}
+                className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Max Length</label>
+              <input
+                type="number"
+                value={field.validation?.maxLength || ''}
+                onChange={(e) => {
+                  const validation = { ...field.validation, maxLength: e.target.value ? parseInt(e.target.value, 10) : undefined };
+                  updateField(sectionIndex, fieldIndex, { validation });
+                }}
+                className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs"
+              />
+            </div>
+          </div>
+          <div className="mt-2">
+            <label className="block text-xs text-gray-600 mb-1">Pattern (Regex)</label>
+            <input
+              type="text"
+              value={field.validation?.pattern || ''}
+              onChange={(e) => {
+                const validation = { ...field.validation, pattern: e.target.value || undefined };
+                updateField(sectionIndex, fieldIndex, { validation });
+              }}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs"
+              placeholder="^[a-zA-Z0-9]+$"
+            />
+          </div>
+        </div>
+
+        {renderFieldOptions(field, sectionIndex, fieldIndex)}
+      </div>
+    );
+  };
+
 
   return (
     <div className={`visual-form-builder ${className}`}>
@@ -1890,8 +2197,20 @@ return mappingData[parentValue] || [];`;
                 </div>
                 {formName.trim() && (
                   <div className="mt-2 text-xs text-blue-500">
-                    💡 You can change the display type anytime - the form will automatically adapt
+                    You can change the display type anytime and the form will adapt.
                   </div>
+                )}
+              </div>
+              <div className={`mt-3 rounded-md border px-3 py-2 text-xs ${
+                hasUnsavedChanges
+                  ? 'border-amber-200 bg-amber-50 text-amber-700'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              }`}>
+                {hasUnsavedChanges ? 'Unsaved changes in progress.' : 'All changes saved.'}
+                {lastDraftSavedAt && (
+                  <span className="ml-2 opacity-80">
+                    Draft autosaved at {new Date(lastDraftSavedAt).toLocaleTimeString()}.
+                  </span>
                 )}
               </div>
 
@@ -2021,7 +2340,10 @@ return mappingData[parentValue] || [];`;
                             className={`p-4 border border-gray-200 rounded-lg ${
                               selectedField === `${sectionIndex}-${fieldIndex}` ? 'ring-2 ring-blue-500' : ''
                             }`}
-                            onClick={() => setSelectedField(`${sectionIndex}-${fieldIndex}`)}
+                            onClick={() => {
+                              setSelectedField(`${sectionIndex}-${fieldIndex}`);
+                              setRightPanelTab('properties');
+                            }}
                           >
                             <div className="flex items-center justify-between mb-3">
                               <div className="flex items-center space-x-2">
@@ -2044,236 +2366,42 @@ return mappingData[parentValue] || [];`;
                               </button>
                             </div>
 
-                                                         {/* Field Properties */}
-                             <div className="grid grid-cols-2 gap-3">
-                               {/* Basic Properties */}
-                               <div>
-                                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                                   Field Name
-                                 </label>
-                                 <input
-                                   type="text"
-                                   value={field.name}
-                                   onChange={(e) => updateField(sectionIndex, fieldIndex, { name: e.target.value })}
-                                   className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                 />
-                               </div>
-                               <div>
-                                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                                   Label
-                                 </label>
-                                 <input
-                                   type="text"
-                                   value={field.label}
-                                   onChange={(e) => updateField(sectionIndex, fieldIndex, { label: e.target.value })}
-                                   className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                 />
-                               </div>
-                               <div>
-                                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                                   Placeholder
-                                 </label>
-                                 <input
-                                   type="text"
-                                   value={field.placeholder || ''}
-                                   onChange={(e) => updateField(sectionIndex, fieldIndex, { placeholder: e.target.value })}
-                                   className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                 />
-                               </div>
-                               <div className="flex items-center space-x-2">
-                                 <label className="flex items-center">
-                                   <input
-                                     type="checkbox"
-                                     checked={field.required || false}
-                                     onChange={(e) => updateField(sectionIndex, fieldIndex, { required: e.target.checked })}
-                                     className="mr-2"
-                                   />
-                                   <span className="text-xs font-medium text-gray-700">Required</span>
-                                 </label>
-                               </div>
-                               
-                               {/* Field Description */}
-                               <div className="col-span-2">
-                                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                                   Description (Help Text)
-                                 </label>
-                                 <input
-                                   type="text"
-                                   value={field.description || ''}
-                                   onChange={(e) => updateField(sectionIndex, fieldIndex, { description: e.target.value })}
-                                   className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                   placeholder="Optional help text for users"
-                                 />
-                               </div>
-                               
-                               {/* Field-Specific Properties */}
-                               {renderFieldSpecificProperties(field, sectionIndex, fieldIndex)}
-                               
-                               {/* Validation Rules */}
-                               <div className="col-span-2">
-                                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                                   Validation Rules
-                                 </label>
-                                 <div className="space-y-2">
-                                   {/* Basic Validation */}
-                                   <div className="grid grid-cols-2 gap-2">
-                                     <div>
-                                       <label className="block text-xs text-gray-600 mb-1">Min Length</label>
-                                       <input
-                                         type="number"
-                                         value={field.validation?.minLength || ''}
-                                         onChange={(e) => {
-                                           const validation = { ...field.validation, minLength: e.target.value ? parseInt(e.target.value) : undefined };
-                                           updateField(sectionIndex, fieldIndex, { validation });
-                                         }}
-                                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                                         placeholder="Min"
-                                       />
-                                     </div>
-                                     <div>
-                                       <label className="block text-xs text-gray-600 mb-1">Max Length</label>
-                                       <input
-                                         type="number"
-                                         value={field.validation?.maxLength || ''}
-                                         onChange={(e) => {
-                                           const validation = { ...field.validation, maxLength: e.target.value ? parseInt(e.target.value) : undefined };
-                                           updateField(sectionIndex, fieldIndex, { validation });
-                                         }}
-                                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                                         placeholder="Max"
-                                       />
-                                     </div>
-                                   </div>
-                                   
-                                   {/* Pattern Validation */}
-                                   <div>
-                                     <label className="block text-xs text-gray-600 mb-1">Pattern (Regex)</label>
-                                     <input
-                                       type="text"
-                                       value={field.validation?.pattern || ''}
-                                       onChange={(e) => {
-                                         const validation = { ...field.validation, pattern: e.target.value || undefined };
-                                         updateField(sectionIndex, fieldIndex, { validation });
-                                       }}
-                                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                                       placeholder="^[a-zA-Z0-9]+$"
-                                     />
-                                   </div>
-                                   
-                                   {/* Number Validation */}
-                                   {(field.type === 'number' || field.type === 'currency' || field.type === 'percentage') && (
-                                     <div className="grid grid-cols-2 gap-2">
-                                       <div>
-                                         <label className="block text-xs text-gray-600 mb-1">Min Value</label>
-                                         <input
-                                           type="number"
-                                           value={field.validation?.min || ''}
-                                           onChange={(e) => {
-                                             const validation = { ...field.validation, min: e.target.value ? parseFloat(e.target.value) : undefined };
-                                             updateField(sectionIndex, fieldIndex, { validation });
-                                           }}
-                                           className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                                           placeholder="Min"
-                                         />
-                                       </div>
-                                       <div>
-                                         <label className="block text-xs text-gray-600 mb-1">Max Value</label>
-                                         <input
-                                           type="number"
-                                           value={field.validation?.max || ''}
-                                           onChange={(e) => {
-                                             const validation = { ...field.validation, max: e.target.value ? parseFloat(e.target.value) : undefined };
-                                             updateField(sectionIndex, fieldIndex, { validation });
-                                           }}
-                                           className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                                           placeholder="Max"
-                                         />
-                                       </div>
-                                     </div>
-                                   )}
-                                   
-                                   {/* File Validation */}
-                                   {field.type === 'file' && (
-                                     <div className="grid grid-cols-2 gap-2">
-                                       <div>
-                                         <label className="block text-xs text-gray-600 mb-1">Max File Size (MB)</label>
-                                         <input
-                                           type="number"
-                                           value={field.validation?.maxFileSize || ''}
-                                           onChange={(e) => {
-                                             const validation = { ...field.validation, maxFileSize: e.target.value ? parseInt(e.target.value) : undefined };
-                                             updateField(sectionIndex, fieldIndex, { validation });
-                                           }}
-                                           className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                                           placeholder="5"
-                                         />
-                                       </div>
-                                       <div>
-                                         <label className="block text-xs text-gray-600 mb-1">Allowed Extensions</label>
-                                         <input
-                                           type="text"
-                                           value={field.validation?.allowedExtensions || ''}
-                                           onChange={(e) => {
-                                             const validation = { ...field.validation, allowedExtensions: e.target.value || undefined };
-                                             updateField(sectionIndex, fieldIndex, { validation });
-                                           }}
-                                           className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                                           placeholder=".pdf,.doc,.jpg"
-                                         />
-                                       </div>
-                                     </div>
-                                   )}
-                                   
-                                   {/* Date Validation */}
-                                   {field.type === 'date' && (
-                                     <div className="grid grid-cols-2 gap-2">
-                                       <div>
-                                         <label className="block text-xs text-gray-600 mb-1">Min Date</label>
-                                         <input
-                                           type="date"
-                                           value={field.validation?.minDate || ''}
-                                           onChange={(e) => {
-                                             const validation = { ...field.validation, minDate: e.target.value || undefined };
-                                             updateField(sectionIndex, fieldIndex, { validation });
-                                           }}
-                                           className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                                         />
-                                       </div>
-                                       <div>
-                                         <label className="block text-xs text-gray-600 mb-1">Max Date</label>
-                                         <input
-                                           type="date"
-                                           value={field.validation?.maxDate || ''}
-                                           onChange={(e) => {
-                                             const validation = { ...field.validation, maxDate: e.target.value || undefined };
-                                             updateField(sectionIndex, fieldIndex, { validation });
-                                           }}
-                                           className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                                         />
-                                       </div>
-                                     </div>
-                                   )}
-                                   
-                                   {/* Custom Validation */}
-                                   <div>
-                                     <label className="block text-xs text-gray-600 mb-1">Custom Validation Message</label>
-                                     <input
-                                       type="text"
-                                       value={field.validation?.customMessage || ''}
-                                       onChange={(e) => {
-                                         const validation = { ...field.validation, customMessage: e.target.value || undefined };
-                                         updateField(sectionIndex, fieldIndex, { validation });
-                                       }}
-                                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                                       placeholder="Custom error message"
-                                     />
-                                   </div>
-                                 </div>
-                               </div>
-                             </div>
-
-                             {/* Options Management for Select/MultiSelect */}
-                             {renderFieldOptions(field, sectionIndex, fieldIndex)}
+                            <div className="flex items-center gap-2 text-xs text-gray-600">
+                              <span className="rounded-full bg-gray-100 px-2 py-1">
+                                Name: {field.name || '-'}
+                              </span>
+                              <span className="rounded-full bg-gray-100 px-2 py-1">
+                                Label: {field.label || '-'}
+                              </span>
+                              {field.required && (
+                                <span className="rounded-full bg-red-100 px-2 py-1 text-red-700">
+                                  Required
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedField(`${sectionIndex}-${fieldIndex}`);
+                                  setRightPanelTab('properties');
+                                }}
+                                className="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-200"
+                              >
+                                Edit In Properties Panel
+                              </button>
+                              {(field.type === 'select' || field.type === 'multiselect' || field.type === 'radio' || field.type === 'checkbox' || field.type === 'rating') && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenOptionsEditor(sectionIndex, fieldIndex);
+                                  }}
+                                  className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 hover:bg-gray-200"
+                                >
+                                  Options
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ))}
 
@@ -2303,10 +2431,36 @@ return mappingData[parentValue] || [];`;
           </div>
         </div>
 
-        {/* Preview Panel */}
-        <div className="w-80 bg-white border-l border-gray-200 p-4 overflow-y-auto">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Preview</h3>
-          
+        {/* Right Panel */}
+        <div className="w-96 bg-white border-l border-gray-200 p-4 overflow-y-auto">
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">Builder Workspace</h3>
+          <p className="text-xs text-gray-500 mb-4">Edit field properties or inspect form structure.</p>
+          <div className="mb-4 grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setRightPanelTab('properties')}
+              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                rightPanelTab === 'properties'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Properties
+            </button>
+            <button
+              onClick={() => setRightPanelTab('preview')}
+              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                rightPanelTab === 'preview'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Structure
+            </button>
+          </div>
+
+          {rightPanelTab === 'properties' ? (
+            renderSelectedFieldPanel()
+          ) : (
           <div className="space-y-4">
             {/* Form Type Indicator */}
             <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
@@ -2414,8 +2568,9 @@ return mappingData[parentValue] || [];`;
                 )}
              </div>
           </div>
-                 </div>
-       </div>
+          )}
+        </div>
+      </div>
 
                {/* Options Editor Modal */}
         {showOptionsEditor && editingField && (() => {
