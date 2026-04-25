@@ -4,6 +4,7 @@ import VisualFormBuilder from './components/VisualFormBuilder';
 import FormBuilder from './FormBuilder';
 import FormWizard from './components/FormWizard';
 import SubmissionManager from './components/SubmissionManager';
+import AutoSuccessMessage from './components/AutoSuccessMessage';
 import Toast from './components/Toast';
 import fileFormManager from './services/fileFormManager';
 import { generateSubmissionHandler } from './utils/submissionHandler';
@@ -375,11 +376,18 @@ export default function FormManagerDemo({ quickAction = null, onQuickActionHandl
                     <h2 className="text-xl font-semibold text-gray-900">Submitted Data</h2>
                   </div>
                   <div className="p-6">
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <pre className="text-sm text-gray-800 overflow-x-auto">
-                        {JSON.stringify(submittedData, null, 2)}
-                      </pre>
-                    </div>
+                    <AutoSuccessMessage
+                      settings={{
+                        ...(selectedForm.settings || {}),
+                        postSubmission: {
+                          ...(selectedForm.settings?.postSubmission || {}),
+                          showSubmittedData: true,
+                          allowResubmit: false
+                        }
+                      }}
+                      submittedData={submittedData}
+                      schema={selectedForm.schema?.sections || selectedForm.schema || []}
+                    />
                     <button
                       onClick={() => setSubmittedData(null)}
                       className="mt-4 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"

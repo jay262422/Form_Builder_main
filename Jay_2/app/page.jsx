@@ -69,7 +69,7 @@ export default function FormBuilderPage() {
                   <h1 className="text-3xl font-bold text-gray-900">Dynamic Form System</h1>
                   <p className="text-gray-600 mt-2">Create, manage, and preview dynamic forms with ease</p>
                   <p className="text-xs text-gray-500 mt-2">
-                    Recommended flow: Form Manager -&gt; Visual Builder -&gt; Form Demos
+                    Recommended flow: Form Manager -&gt; Builder -&gt; Preview -&gt; Publish
                   </p>
                 </div>
                 <div className="flex items-center space-x-4">

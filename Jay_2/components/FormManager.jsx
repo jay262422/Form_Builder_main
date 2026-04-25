@@ -931,40 +931,56 @@ export default function FormManager({
 
                  {/* Form Settings */}
                  <div>
-                   <h4 className="text-md font-medium text-gray-900 mb-3">Form Behavior</h4>
+                   <h4 className="text-md font-medium text-gray-900 mb-3">Submission Rules</h4>
                    <div className="space-y-4">
-                     <label className="flex items-center space-x-3 cursor-pointer">
-                                               <input
+                     <div className="rounded-lg border border-gray-200 p-4">
+                       <label className="flex items-center space-x-3 cursor-pointer">
+                        <input
                           type="checkbox"
                           checked={pendingSettings?.allowMultipleSubmissions || false}
                           onChange={(e) => {
                             updatePendingSettings({
-                              allowMultipleSubmissions: e.target.checked
+                              allowMultipleSubmissions: e.target.checked,
+                              postSubmission: {
+                                ...(pendingSettings?.postSubmission || {}),
+                                allowResubmit: e.target.checked
+                                  ? (pendingSettings?.postSubmission?.allowResubmit ?? true)
+                                  : false
+                              }
                             });
                           }}
-                         className="w-5 h-5 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
-                       />
-                       <span className="text-sm text-gray-700">Allow multiple submissions from same user</span>
-                     </label>
-                                           <label className="flex items-center space-x-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={pendingSettings?.requireAuthentication || false}
-                          onChange={(e) => {
-                            updatePendingSettings({
-                              requireAuthentication: e.target.checked
-                            });
-                          }}
-                          className="w-5 h-5 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 focus:ring-2"
+                          className="w-5 h-5 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
                         />
-                        <span className="text-sm text-gray-700">Require user authentication to submit</span>
+                        <span className="text-sm text-gray-700">Allow more than one submission from the same person</span>
                       </label>
+                      <p className="mt-2 text-xs text-gray-500">
+                        If this is off, repeat submissions are blocked for logged-in users by account and for public users by IP.
+                      </p>
+                     </div>
+                     <div className="rounded-lg border border-gray-200 p-4">
+                       <label className="flex items-center space-x-3 cursor-pointer">
+                         <input
+                           type="checkbox"
+                           checked={pendingSettings?.requireAuthentication || false}
+                           onChange={(e) => {
+                             updatePendingSettings({
+                               requireAuthentication: e.target.checked
+                             });
+                           }}
+                           className="w-5 h-5 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 focus:ring-2"
+                         />
+                         <span className="text-sm text-gray-700">Require login before submitting</span>
+                       </label>
+                       <p className="mt-2 text-xs text-gray-500">
+                         Useful for internal forms or member-only responses.
+                       </p>
+                     </div>
                    </div>
                  </div>
 
                  {/* Button Configuration */}
                  <div>
-                   <h4 className="text-md font-medium text-gray-900 mb-3">Button Configuration</h4>
+                   <h4 className="text-md font-medium text-gray-900 mb-3">Form Buttons</h4>
                    <div className="space-y-4">
                      {/* Submit Button Settings */}
                      <div className="border border-gray-200 rounded-lg p-4">
@@ -986,36 +1002,12 @@ export default function FormManager({
                                     }
                                   }
                                 });
-                              }}
+                             }}
                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                              placeholder="Submit"
                            />
                          </div>
-                         <div>
-                           <label className="block text-sm font-medium text-gray-700 mb-1">Custom API Endpoint (optional)</label>
-                                                       <input
-                              type="text"
-                              value={pendingSettings?.buttons?.submit?.customApiEndpoint || ''}
-                              onChange={(e) => {
-                                const currentButtons = pendingSettings?.buttons || {};
-                                updatePendingSettings({
-                                  buttons: {
-                                    ...currentButtons,
-                                    submit: {
-                                      ...currentButtons.submit,
-                                      customApiEndpoint: e.target.value || null
-                                    }
-                                  }
-                                });
-                              }}
-                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                             placeholder="https://api.example.com/submit (leave empty for default)"
-                           />
-                           <p className="text-xs text-gray-500 mt-1">
-                             Leave empty to use the default form submission endpoint
-                           </p>
-                         </div>
-                       </div>
+                        </div>
                      </div>
 
                      {/* Reset Button Settings */}
@@ -1067,62 +1059,12 @@ export default function FormManager({
                          )}
                        </div>
                      </div>
-
-                                           {/* Cancel Button Settings */}
-                      <div className="border border-gray-200 rounded-lg p-4">
-                        <h5 className="text-sm font-medium text-gray-900 mb-3">Cancel Button</h5>
-                        <div className="space-y-3">
-                          <label className="flex items-center space-x-3 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={pendingSettings?.buttons?.cancel?.show !== false}
-                              onChange={(e) => {
-                                const currentButtons = pendingSettings?.buttons || {};
-                                updatePendingSettings({
-                                  buttons: {
-                                    ...currentButtons,
-                                    cancel: {
-                                      ...currentButtons.cancel,
-                                      show: e.target.checked
-                                    }
-                                  }
-                                });
-                              }}
-                              className="w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2"
-                            />
-                            <span className="text-sm text-gray-700">Show cancel button</span>
-                          </label>
-                          {pendingSettings?.buttons?.cancel?.show !== false && (
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Cancel Button Text</label>
-                              <input
-                                type="text"
-                                value={pendingSettings?.buttons?.cancel?.text || 'Cancel'}
-                                onChange={(e) => {
-                                  const currentButtons = pendingSettings?.buttons || {};
-                                  updatePendingSettings({
-                                    buttons: {
-                                      ...currentButtons,
-                                      cancel: {
-                                        ...currentButtons.cancel,
-                                        text: e.target.value
-                                      }
-                                    }
-                                  });
-                                }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                placeholder="Cancel"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
                    </div>
                  </div>
 
                  {/* Form Messages */}
                  <div>
-                   <h4 className="text-md font-medium text-gray-900 mb-3">Form Messages</h4>
+                   <h4 className="text-md font-medium text-gray-900 mb-3">Messages</h4>
                    <div className="space-y-3">
                                            <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Success Message</label>
@@ -1152,26 +1094,12 @@ export default function FormManager({
                           placeholder="Please check your form and try again."
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Redirect URL (after submission)</label>
-                        <input
-                          type="text"
-                          value={pendingSettings?.redirectUrl || "/thank-you"}
-                          onChange={(e) => {
-                            updatePendingSettings({
-                              redirectUrl: e.target.value
-                            });
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="/thank-you"
-                        />
-                      </div>
                    </div>
                  </div>
 
                  {/* Post-Submission Settings */}
                   <div>
-                    <h4 className="text-md font-medium text-gray-900 mb-3">Post-Submission Behavior</h4>
+                    <h4 className="text-md font-medium text-gray-900 mb-3">After Submit</h4>
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <label className="flex items-center space-x-3 cursor-pointer">
@@ -1185,33 +1113,38 @@ export default function FormManager({
                             }}
                             className="w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2"
                           />
-                          <span className="text-sm text-gray-700">Show success page after submission</span>
+                          <span className="text-sm text-gray-700">Show a success screen after submit</span>
                         </label>
                         <label className="flex items-center space-x-3 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={pendingSettings?.postSubmission?.showSubmittedData || false}
+                            disabled={pendingSettings?.postSubmission?.showSuccessPage === false}
                             onChange={(e) => {
                               updatePendingPostSubmissionSettings({
                                 showSubmittedData: e.target.checked
                               });
                             }}
-                            className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                            className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 disabled:opacity-50"
                           />
-                          <span className="text-sm text-gray-700">Show submitted data to user</span>
+                          <span className="text-sm text-gray-700">Show submitted answers on the success screen</span>
                         </label>
                         <label className="flex items-center space-x-3 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={pendingSettings?.postSubmission?.allowResubmit || false}
+                            disabled={
+                              pendingSettings?.postSubmission?.showSuccessPage === false ||
+                              !pendingSettings?.allowMultipleSubmissions
+                            }
                             onChange={(e) => {
                               updatePendingPostSubmissionSettings({
                                 allowResubmit: e.target.checked
                               });
                             }}
-                            className="w-5 h-5 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
+                            className="w-5 h-5 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2 disabled:opacity-50"
                           />
-                          <span className="text-sm text-gray-700">Allow user to submit again</span>
+                          <span className="text-sm text-gray-700">Show a "Submit another response" button</span>
                         </label>
                         <label className="flex items-center space-x-3 cursor-pointer">
                           <input
@@ -1224,13 +1157,25 @@ export default function FormManager({
                             }}
                             className="w-5 h-5 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 focus:ring-2"
                           />
-                          <span className="text-sm text-gray-700">Auto-redirect after submission</span>
+                          <span className="text-sm text-gray-700">Redirect after successful submission</span>
                         </label>
                       </div>
+
+                      {pendingSettings?.postSubmission?.showSuccessPage === false && (
+                        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          The success screen is off. Enable redirect if you still want users to see a clear completion flow.
+                        </div>
+                      )}
+
+                      {!pendingSettings?.allowMultipleSubmissions && (
+                        <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                          "Submit another response" is disabled because repeat submissions are currently blocked.
+                        </div>
+                      )}
                       
                       {pendingSettings?.postSubmission?.allowResubmit && (
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Resubmit Button Text</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Button Text</label>
                           <input
                             type="text"
                             value={pendingSettings?.postSubmission?.resubmitText || "Submit Another Request"}
@@ -1246,27 +1191,47 @@ export default function FormManager({
                       )}
                       
                       {pendingSettings?.postSubmission?.autoRedirect?.enabled && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Auto-redirect Delay (seconds)</label>
-                          <input
-                            type="number"
-                            min="1"
-                            max="30"
-                            value={Math.round((pendingSettings?.postSubmission?.autoRedirect?.delay || 3000) / 1000)}
-                            onChange={(e) => {
-                              updatePendingAutoRedirectSettings({
-                                delay: Number.parseInt(e.target.value || '0', 10) * 1000
-                              });
-                            }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="3"
-                          />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Redirect URL</label>
+                            <input
+                              type="text"
+                              value={pendingSettings?.redirectUrl || "/thank-you"}
+                              onChange={(e) => {
+                                updatePendingSettings({
+                                  redirectUrl: e.target.value
+                                });
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="/thank-you"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Delay (seconds)</label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="30"
+                              value={Math.round((pendingSettings?.postSubmission?.autoRedirect?.delay || 3000) / 1000)}
+                              onChange={(e) => {
+                                updatePendingAutoRedirectSettings({
+                                  delay: Number.parseInt(e.target.value || '0', 10) * 1000
+                                });
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="3"
+                            />
+                          </div>
                         </div>
                       )}
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Success Icon</label>
+
+                      <details className="rounded-lg border border-gray-200 p-4">
+                        <summary className="cursor-pointer text-sm font-medium text-gray-800">
+                          Advanced appearance options
+                        </summary>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Success Icon</label>
                           <input
                             type="text"
                             value={pendingSettings?.postSubmission?.successIcon || "OK"}
@@ -1278,9 +1243,9 @@ export default function FormManager({
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             placeholder="OK"
                           />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Error Icon</label>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Error Icon</label>
                           <input
                             type="text"
                             value={pendingSettings?.postSubmission?.errorIcon || "!"}
@@ -1292,8 +1257,9 @@ export default function FormManager({
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             placeholder="!"
                           />
+                          </div>
                         </div>
-                      </div>
+                      </details>
                     </div>
                   </div>
 

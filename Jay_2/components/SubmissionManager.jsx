@@ -22,6 +22,94 @@ const isUploadedFileValue = (value) => {
   return Boolean(value.name && value.type && (value.url || value.storageKey || value.data));
 };
 
+const flattenSchemaFields = (schema) => {
+  if (!schema) return [];
+
+  const sections = Array.isArray(schema)
+    ? schema
+    : Array.isArray(schema.sections)
+      ? schema.sections
+      : [];
+
+  return sections.flatMap((section) => section?.fields || []);
+};
+
+const isImageDataUrl = (value) => typeof value === 'string' && value.startsWith('data:image/');
+
+const isLongTextValue = (value) => typeof value === 'string' && value.length > 180;
+
+function ExpandableText({ value }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!isLongTextValue(value)) {
+    return <div className="whitespace-pre-wrap break-words">{value || 'No value'}</div>;
+  }
+
+  return (
+    <div>
+      <div className="whitespace-pre-wrap break-words">
+        {expanded ? value : `${value.slice(0, 180)}...`}
+      </div>
+      <button
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+        className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-700"
+      >
+        {expanded ? 'Show less' : 'Show more'}
+      </button>
+    </div>
+  );
+}
+
+function ImagePreviewCard({ src, alt, label }) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <div className="border-b border-gray-100 bg-gray-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+        {label}
+      </div>
+      <div className="p-3">
+        <img
+          src={src}
+          alt={alt}
+          className="max-h-56 w-full rounded-md object-contain bg-white"
+        />
+        <a
+          href={src}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-flex text-sm font-medium text-blue-600 hover:text-blue-700"
+        >
+          Open full image
+        </a>
+      </div>
+    </div>
+  );
+}
+
+const formatStructuredValue = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return 'No value';
+  }
+
+  if (Array.isArray(value)) {
+    return value.length ? value.map((item) => formSubmissionService.normalizeExportValue(item)).join(', ') : 'No value';
+  }
+
+  if (typeof value === 'object') {
+    const visibleEntries = Object.entries(value).filter(([, itemValue]) => (
+      itemValue !== null && itemValue !== undefined && itemValue !== ''
+    ));
+
+    if (!visibleEntries.length) {
+      return 'No value';
+    }
+
+    return visibleEntries.map(([key, itemValue]) => `${key}: ${formSubmissionService.normalizeExportValue(itemValue)}`).join(', ');
+  }
+
+  return String(value);
+};
+
 /**
  * SubmissionManager - Component to manage form submissions
  * Displays submissions, allows deletion, filtering, pagination, analytics, and export functionality
@@ -462,6 +550,10 @@ export default function SubmissionManager({
   const filterSummary = searchTerm ? `${filteredSubmissions.length} matches on this page` : totalPageLabel;
   const maxDailyCount = Math.max(...analytics.dailyTrend.map((item) => item.count), 1);
   const maxWeekdayCount = Math.max(...analytics.weekdayTrend.map((item) => item.count), 1);
+  const fieldDefinitions = useMemo(() => flattenSchemaFields(formSchema?.schema || formSchema), [formSchema]);
+  const fieldMap = useMemo(() => (
+    new Map(fieldDefinitions.map((field) => [field.name, field]))
+  ), [fieldDefinitions]);
 
   return (
     <div className={`submission-manager flex h-full flex-col ${className}`}>
@@ -805,13 +897,21 @@ export default function SubmissionManager({
                   <h4 className="mb-3 text-sm font-medium text-gray-700">Response Data</h4>
                   <div className="space-y-3">
                     {Object.entries(selectedSubmission.formData || {}).map(([key, value]) => (
-                      <div key={key} className="text-sm">
-                        <div className="font-medium text-gray-700">{key}</div>
+                      <div key={key} className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
+                        <div className="font-medium text-gray-700">{fieldMap.get(key)?.label || key}</div>
                         <div className="mt-1 break-words text-gray-900">
                           {isUploadedFileValue(value) || (Array.isArray(value) && value.some(isUploadedFileValue)) ? (
                             <FileDisplay files={value} fieldName={key} />
+                          ) : (fieldMap.get(key)?.type === 'signature' && isImageDataUrl(value)) || isImageDataUrl(value) ? (
+                            <ImagePreviewCard
+                              src={value}
+                              alt={fieldMap.get(key)?.label || key}
+                              label={fieldMap.get(key)?.type === 'signature' ? 'Signature Preview' : 'Image Preview'}
+                            />
+                          ) : typeof value === 'string' ? (
+                            <ExpandableText value={value} />
                           ) : (
-                            formSubmissionService.normalizeExportValue(value) || 'No value'
+                            formatStructuredValue(value)
                           )}
                         </div>
                       </div>

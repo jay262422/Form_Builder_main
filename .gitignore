@@ -11,7 +11,7 @@
 **/build/
 **/.next/
 **/out/
-
+**/.next**
 # Logs
 *.log
 npm-debug.log*

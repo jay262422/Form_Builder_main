@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import FormBuilder from "../../../FormBuilder";
 import FormWizard from "../../../components/FormWizard";
 import AutoErrorMessage from "../../../components/AutoErrorMessage";
 import AutoSuccessMessage from "../../../components/AutoSuccessMessage";
 import LoadingSpinner from "../../../components/LoadingSpinner";
+import { useAuth } from "../../../contexts/AuthContext";
 import { isStepByStepForm } from "../../../utils/formHelpers";
 import { generateSubmissionHandler } from "../../../utils/submissionHandler";
 
@@ -19,6 +20,8 @@ const getApiBaseURL = () => {
 
 export default function PublishedFormPage() {
   const params = useParams();
+  const router = useRouter();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const formId = params?.id;
   const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -57,6 +60,9 @@ export default function PublishedFormPage() {
   const schema = useMemo(() => (
     form?.schema?.sections || form?.schema || []
   ), [form]);
+
+  const requiresLogin = Boolean(form?.settings?.requireAuthentication);
+  const shouldBlockForAuth = requiresLogin && !authLoading && !isAuthenticated;
 
   const handleSubmit = async (formData) => {
     if (!form) return;
@@ -137,6 +143,7 @@ export default function PublishedFormPage() {
               <AutoSuccessMessage
                 settings={form.settings || {}}
                 submittedData={submittedData}
+                schema={schema}
                 onResubmit={form.settings?.postSubmission?.allowResubmit ? handleResubmit : undefined}
               />
             </div>
@@ -169,21 +176,42 @@ export default function PublishedFormPage() {
             </div>
             <h1 className="mt-4 text-3xl font-bold">{form.name}</h1>
             {form.description && <p className="mt-2 max-w-2xl text-slate-300">{form.description}</p>}
-            {(form.settings?.successMessage || form.settings?.redirectUrl) && (
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                <div className="rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Success message</div>
-                  <div className="mt-2 text-sm text-slate-200">{form.settings?.successMessage || "Form submitted successfully!"}</div>
+            {requiresLogin && (
+              <div className="mt-5 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-4">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-amber-200">Before you start</div>
+                <div className="mt-2 text-sm text-amber-50">
+                  This form requires sign-in before you can submit a response.
                 </div>
-                <div className="rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Redirect target</div>
-                  <div className="mt-2 text-sm text-slate-200">{form.settings?.redirectUrl || "No redirect configured"}</div>
-                </div>
+                {shouldBlockForAuth && (
+                  <button
+                    onClick={() => router.push("/login")}
+                    className="mt-4 rounded-lg bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
+                  >
+                    Go to login
+                  </button>
+                )}
               </div>
             )}
           </div>
           <div className="px-8 py-8">
-            {isStepByStepForm(form) ? (
+            {authLoading ? (
+              <div className="py-10">
+                <LoadingSpinner />
+              </div>
+            ) : shouldBlockForAuth ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
+                <h2 className="text-xl font-semibold text-slate-900">Login required to continue</h2>
+                <p className="mt-3 text-sm text-slate-600 max-w-xl mx-auto">
+                  Sign in first, then come back to this shared form and submit your response.
+                </p>
+                <button
+                  onClick={() => router.push("/login")}
+                  className="mt-6 rounded-lg bg-slate-900 px-5 py-3 text-sm font-medium text-white hover:bg-slate-800"
+                >
+                  Login to submit
+                </button>
+              </div>
+            ) : isStepByStepForm(form) ? (
               <FormWizard
                 schema={schema}
                 form={form}
