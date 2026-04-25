@@ -74,6 +74,9 @@ const SIMPLE_API_CONFIG = {
       getStats: '/api/submissions/form/:formId/stats',
       export: '/api/submissions/form/:formId/export'
     },
+    uploads: {
+      uploadForForm: '/api/uploads/form/:formId'
+    },
     workspaces: {
       getMine: '/api/workspaces/me',
       updateMine: '/api/workspaces/me',

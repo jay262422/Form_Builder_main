@@ -294,7 +294,7 @@ export default function FormManagerDemo({ quickAction = null, onQuickActionHandl
                     </h2>
                     <p className="text-sm text-gray-600">
                       {selectedForm.name} {selectedForm.isTemplate && '(Template)'}
-                      {selectedForm.originalFormType === 'wizard' && (
+                      {isStepByStepForm(selectedForm) && (
                         <span className="ml-2 text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
                           Step-by-Step Form
                         </span>
@@ -353,6 +353,7 @@ export default function FormManagerDemo({ quickAction = null, onQuickActionHandl
                       title={selectedForm.name}
                       description={selectedForm.description || 'Complete the form step by step'}
                       formTheme={selectedForm.schema?.formTheme || 'modern'}
+                      displayMode="embedded"
                     />
                   ) : (
                     <FormBuilder

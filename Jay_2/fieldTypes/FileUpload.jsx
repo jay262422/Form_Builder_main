@@ -26,6 +26,11 @@ export default function FileUpload({
   defaultValue,
   ...props
 }) {
+  const validationConfig = validation || {};
+  const effectiveAccept = validationConfig.allowedExtensions || accept;
+  const effectiveMaxSize = validationConfig.maxFileSize
+    ? Number(validationConfig.maxFileSize) * 1024 * 1024
+    : maxSize;
   const [isDragOver, setIsDragOver] = useState(false);
   const [fileError, setFileError] = useState(null);
   const fileInputRef = useRef(null);
@@ -33,13 +38,13 @@ export default function FileUpload({
 
   const validateFile = (file) => {
     // Check file size
-    if (file.size > maxSize) {
-      return `File size exceeds ${formatFileSize(maxSize)} limit`;
+    if (effectiveMaxSize && file.size > effectiveMaxSize) {
+      return `File size exceeds ${formatFileSize(effectiveMaxSize)} limit`;
     }
 
     // Check file type if accept is specified
-    if (accept && accept !== '*/*') {
-      const acceptedTypes = accept.split(',').map(type => type.trim());
+    if (effectiveAccept && effectiveAccept !== '*/*') {
+      const acceptedTypes = effectiveAccept.split(',').map(type => type.trim());
       const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
       const fileType = file.type;
       
@@ -55,7 +60,7 @@ export default function FileUpload({
       });
 
       if (!isAccepted) {
-        return `File type not allowed. Accepted types: ${accept}`;
+        return `File type not allowed. Accepted types: ${effectiveAccept}`;
       }
     }
 
@@ -129,8 +134,8 @@ export default function FileUpload({
   };
 
   const getAcceptedTypes = () => {
-    if (!accept) return 'All files';
-    return accept.split(',').map(type => type.trim()).join(', ');
+    if (!effectiveAccept) return 'All files';
+    return effectiveAccept.split(',').map(type => type.trim()).join(', ');
   };
 
   const displayError = error || fileError;
@@ -164,7 +169,7 @@ export default function FileUpload({
           ref={fileInputRef}
           id={inputId}
           type="file"
-          accept={accept}
+          accept={effectiveAccept}
           multiple={multiple}
           onChange={handleInputChange}
           onBlur={onBlur}
@@ -195,7 +200,7 @@ export default function FileUpload({
           
           <div className="text-xs text-gray-500">
             {getAcceptedTypes()}
-            {maxSize && ` (Max size: ${formatFileSize(maxSize)})`}
+            {effectiveMaxSize && ` (Max size: ${formatFileSize(effectiveMaxSize)})`}
           </div>
         </div>
       </div>

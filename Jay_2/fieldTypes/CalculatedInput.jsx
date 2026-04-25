@@ -77,9 +77,13 @@ export default function CalculatedInput({
     }
 
     // Create safe calculation function
+    const normalizedFormula = formula.includes('return')
+      ? formula
+      : `return (${formula});`;
+
     const calculationFunction = new Function('formData', 'dependencies', `
       try {
-        ${formula}
+        ${normalizedFormula}
       } catch (error) {
         throw new Error('Calculation failed: ' + error.message);
       }

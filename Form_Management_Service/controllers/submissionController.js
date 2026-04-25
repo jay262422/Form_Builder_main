@@ -38,7 +38,7 @@ const getAccessibleFormIds = async (req) => {
 };
 
 const getOwnedFormByCustomId = async (formId, reqUserId, reqWorkspaceId) => {
-  const form = await Form.findOne({ id: formId });
+  const form = await Form.findOne({ id: formId }).lean();
 
   if (!form) {
     return { form: null, error: { type: 'not_found' } };
@@ -57,7 +57,7 @@ const getOwnedFormByCustomId = async (formId, reqUserId, reqWorkspaceId) => {
 };
 
 const getOwnedSubmissionById = async (submissionId, reqUserId, reqWorkspaceId) => {
-  const submission = await Submission.findOne({ submissionId });
+  const submission = await Submission.findOne({ submissionId }).lean();
 
   if (!submission) {
     return { submission: null, form: null, error: { type: 'not_found' } };
@@ -83,6 +83,33 @@ const hasOwnedFormAccess = (form, reqUserId, reqWorkspaceId) => {
   }
 
   return false;
+};
+
+const normalizeForStorage = (value) => {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeForStorage(item));
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value === 'object') {
+    const plainValue = typeof value.toObject === 'function'
+      ? value.toObject()
+      : { ...value };
+
+    return Object.entries(plainValue).reduce((accumulator, [key, item]) => {
+      accumulator[key] = normalizeForStorage(item);
+      return accumulator;
+    }, {});
+  }
+
+  return value;
 };
 
 // Get all submissions
@@ -118,6 +145,7 @@ exports.getAllSubmissions = async (req, res) => {
       .sort({ submittedAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit)
+      .lean()
       .exec();
     
     const total = await Submission.countDocuments(query);
@@ -165,6 +193,9 @@ exports.createSubmission = async (req, res) => {
       return validationError(res, 'formId and formData are required');
     }
     
+    const normalizedFormData = normalizeForStorage(formData);
+    const normalizedMetadata = normalizeForStorage(metadata || {});
+
     // Generate submissionId if not provided
     const finalSubmissionId = submissionId || `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -175,7 +206,7 @@ exports.createSubmission = async (req, res) => {
     }
 
     // Ensure form exists by custom form ID.
-    const form = await Form.findOne({ id: formId });
+    const form = await Form.findOne({ id: formId }).lean();
     if (!form) {
       return notFoundResponse(res, 'Form not found');
     }
@@ -210,25 +241,37 @@ exports.createSubmission = async (req, res) => {
       submissionId: finalSubmissionId,
       formId,
       userId: req.userId || null, // Set userId if authenticated
-      formData,
+      formData: normalizedFormData,
       submittedAt: new Date(),
       metadata: {
-        userAgent: metadata?.userAgent || req.get('User-Agent'),
-        ipAddress: metadata?.ipAddress || req.ip,
+        userAgent: normalizedMetadata.userAgent || req.get('User-Agent'),
+        ipAddress: normalizedMetadata.ipAddress || req.ip || null,
         referrer: req.headers.referer || null,
-        formName: metadata?.formName || form.name,
-        formType: metadata?.formType || form.type || form.schema?.formType || 'multi-section',
-        fieldCount: metadata?.fieldCount ?? form.schema?.sections?.reduce((total, section) => total + (section.fields?.length || 0), 0) ?? 0,
-        submissionMode: metadata?.submissionMode || metadata?.source || 'form-page',
-        submitterEmail: metadata?.submitterEmail || req.user?.email || null,
-        submittedBy: metadata?.submittedBy || req.user?.name || null
+        formName: normalizedMetadata.formName || form.name,
+        formType: normalizedMetadata.formType || form.type || form.schema?.formType || 'multi-section',
+        fieldCount: normalizedMetadata.fieldCount ?? form.schema?.sections?.reduce((total, section) => total + (section.fields?.length || 0), 0) ?? 0,
+        submissionMode: normalizedMetadata.submissionMode || normalizedMetadata.source || 'form-page',
+        submitterEmail: normalizedMetadata.submitterEmail || req.user?.email || null,
+        submittedBy: normalizedMetadata.submittedBy || req.user?.name || null
       }
     });
     
     await submission.save();
     await syncFormSubmissionStatistics(formId);
+
+    const savedSubmission = await Submission.findOne({ submissionId: finalSubmissionId }).lean();
     
-    return createdResponse(res, submission, 'Submission created successfully');
+    return createdResponse(
+      res,
+      savedSubmission || {
+        submissionId: finalSubmissionId,
+        formId,
+        formData: normalizedFormData,
+        submittedAt: submission.submittedAt,
+        metadata: submission.metadata
+      },
+      'Submission created successfully'
+    );
   } catch (error) {
     return errorResponse(res, error.message || 'Failed to create submission', 500);
   }
@@ -262,7 +305,7 @@ exports.updateSubmission = async (req, res) => {
     const submission = await Submission.findOneAndUpdate(
       { _id: existingSubmission._id },
       updateData, 
-      { new: true, runValidators: true }
+      { new: true, runValidators: true, lean: true }
     );
     
     if (!submission) {
@@ -329,6 +372,7 @@ exports.getSubmissionsByForm = async (req, res) => {
       .sort({ submittedAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit)
+      .lean()
       .exec();
     
     const total = await Submission.countDocuments(query);
@@ -361,7 +405,7 @@ exports.getSubmissionStats = async (req, res) => {
     const query = { formId };
     
     const totalSubmissions = await Submission.countDocuments(query);
-    const latestSubmission = await Submission.findOne(query).sort({ submittedAt: -1 });
+    const latestSubmission = await Submission.findOne(query).sort({ submittedAt: -1 }).lean();
     
     const stats = {
       formId,
@@ -399,7 +443,8 @@ exports.exportSubmissions = async (req, res) => {
     }
     
     const submissions = await Submission.find(query)
-      .sort({ submittedAt: -1 });
+      .sort({ submittedAt: -1 })
+      .lean();
     
     if (format === 'csv') {
       // Convert to CSV format

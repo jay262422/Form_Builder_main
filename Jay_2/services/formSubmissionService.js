@@ -137,9 +137,9 @@ class FormSubmissionService {
       }
 
       if (Array.isArray(fileValue)) {
-        processedData[fieldName] = await Promise.all(fileValue.map(file => this.processFile(file)));
+        processedData[fieldName] = await Promise.all(fileValue.map(file => this.processFile(file, formSchema, fieldName)));
       } else {
-        processedData[fieldName] = await this.processFile(fileValue);
+        processedData[fieldName] = await this.processFile(fileValue, formSchema, fieldName);
       }
     }
 
@@ -149,21 +149,51 @@ class FormSubmissionService {
   /**
    * Convert a File object to serializable payload
    */
-  async processFile(file) {
+  getUploadHeaders() {
+    const headers = {};
+
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+    }
+
+    return headers;
+  }
+
+  async uploadFile(file, formSchema, fieldName) {
+    const formId = formSchema?.id;
+    if (!formId) {
+      throw new Error('formId is required to upload files');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    if (fieldName) {
+      formData.append('fieldName', fieldName);
+    }
+
+    const url = SIMPLE_API_CONFIG.getEndpointURL('uploads', 'uploadForForm', { formId });
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: this.getUploadHeaders(),
+      body: formData
+    });
+
+    return this.parseResponse(response);
+  }
+
+  async processFile(file, formSchema, fieldName) {
     if (!file || !(file instanceof File)) {
       return file;
     }
 
     try {
-      const base64 = await this.fileToBase64(file);
-
+      const uploadedFile = await this.uploadFile(file, formSchema, fieldName);
       return {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        lastModified: file.lastModified,
-        data: base64,
-        processed: true
+        ...uploadedFile,
+        lastModified: file.lastModified
       };
     } catch (error) {
       console.error('Error processing file:', error);
@@ -175,15 +205,6 @@ class FormSubmissionService {
         processed: false
       };
     }
-  }
-
-  fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = error => reject(error);
-    });
   }
 
   generateSubmissionId() {

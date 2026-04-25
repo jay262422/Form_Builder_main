@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import FormManagerDemo from "../FormManagerDemo";
-import ALL_Form_view from "../ALL_Form_view";
 import FieldOptionsTester from "../components/FieldOptionsTester";
 import ErrorBoundary from "../components/ErrorBoundary";
 import ThemeEditorDemo from "../ThemeEditorDemo";
@@ -14,7 +13,6 @@ import Toast from "../components/Toast";
 
 const HOME_TABS = [
   { id: "manager", label: "Form Manager", hint: "Create, organize, and edit forms" },
-  { id: "demo", label: "Form Demos", hint: "Preview and test form behavior" },
   { id: "fieldOptions", label: "Field Options (Dev)", hint: "Manage option APIs and mappings", devOnly: true },
   { id: "themeEditor", label: "Theme Editor (Dev)", hint: "Customize visual themes", devOnly: true }
 ];
@@ -131,7 +129,9 @@ export default function FormBuilderPage() {
             ) : activeDemo === "themeEditor" ? (
               <ThemeEditorDemo />
             ) : (
-              <ALL_Form_view />
+              <FormManagerDemo
+                onViewStateChange={setManagerViewState}
+              />
             )}
           </ErrorBoundary>
         </div>

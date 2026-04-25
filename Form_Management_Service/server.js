@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -14,6 +15,7 @@ const submissionRoutes = require('./routes/submissionRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const workspaceRoutes = require('./routes/workspaceRoutes');
 const auditLogRoutes = require('./routes/auditLogRoutes');
+const uploadRoutes = require('./routes/uploadRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3004;
@@ -33,6 +35,7 @@ app.use(compression());
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -52,6 +55,7 @@ app.use('/api/submissions', submissionRoutes);
 app.use('/api/category-management', categoryRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/uploads', uploadRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

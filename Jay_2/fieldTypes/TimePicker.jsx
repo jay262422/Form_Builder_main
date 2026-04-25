@@ -9,13 +9,15 @@ export default function TimePicker({
   min,
   max,
   step,
+  minTime,
+  maxTime,
   validation,
   ...props
 }) {
   // Use validation object if provided, otherwise fall back to individual props
   const validationConfig = validation || {};
-  const finalMin = validationConfig.min || min;
-  const finalMax = validationConfig.max || max;
+  const finalMin = validationConfig.min || validationConfig.minTime || minTime || min;
+  const finalMax = validationConfig.max || validationConfig.maxTime || maxTime || max;
   const finalStep = validationConfig.step || step;
 
   return (

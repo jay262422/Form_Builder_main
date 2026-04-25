@@ -8,13 +8,15 @@ import TextInput from './TextInput';
 export default function DatePicker({
   min,
   max,
+  minDate,
+  maxDate,
   validation,
   ...props
 }) {
   // Use validation object if provided, otherwise fall back to individual props
   const validationConfig = validation || {};
-  const finalMin = validationConfig.min || min;
-  const finalMax = validationConfig.max || max;
+  const finalMin = validationConfig.min || validationConfig.minDate || minDate || min;
+  const finalMax = validationConfig.max || validationConfig.maxDate || maxDate || max;
 
   return (
     <TextInput

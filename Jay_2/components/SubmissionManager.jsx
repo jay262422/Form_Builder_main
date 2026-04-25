@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import formSubmissionService from '../services/formSubmissionService';
+import FileDisplay from './FileDisplay';
 
 const DEFAULT_PAGE_SIZE = 20;
 const ANALYTICS_SAMPLE_LIMIT = 500;
@@ -12,6 +13,14 @@ const CORE_EXPORT_COLUMNS = [
   'submitter',
   'submitterEmail'
 ];
+
+const isUploadedFileValue = (value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  return Boolean(value.name && value.type && (value.url || value.storageKey || value.data));
+};
 
 /**
  * SubmissionManager - Component to manage form submissions
@@ -799,7 +808,11 @@ export default function SubmissionManager({
                       <div key={key} className="text-sm">
                         <div className="font-medium text-gray-700">{key}</div>
                         <div className="mt-1 break-words text-gray-900">
-                          {formSubmissionService.normalizeExportValue(value) || 'No value'}
+                          {isUploadedFileValue(value) || (Array.isArray(value) && value.some(isUploadedFileValue)) ? (
+                            <FileDisplay files={value} fieldName={key} />
+                          ) : (
+                            formSubmissionService.normalizeExportValue(value) || 'No value'
+                          )}
                         </div>
                       </div>
                     ))}

@@ -1569,7 +1569,7 @@ return mappingData[parentValue] || [];`;
                 value={field.formula || ''}
                 onChange={(e) => updateField(sectionIndex, fieldIndex, { formula: e.target.value })}
                 className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="e.g., field1 + field2 * 0.1"
+                placeholder="e.g., (formData.field1 || 0) + (formData.field2 || 0)"
                 rows="2"
               />
             </div>
@@ -1674,6 +1674,17 @@ return mappingData[parentValue] || [];`;
                 min="0"
                 max="4"
               />
+            </div>
+            <div className="flex items-center space-x-2">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={field.showSlider !== false}
+                  onChange={(e) => updateField(sectionIndex, fieldIndex, { showSlider: e.target.checked })}
+                  className="mr-2"
+                />
+                <span className="text-xs font-medium text-gray-700">Show Slider</span>
+              </label>
             </div>
           </>
         );

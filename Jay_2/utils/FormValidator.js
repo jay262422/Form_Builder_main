@@ -1,3 +1,5 @@
+import { shouldShowField } from './conditionHelpers';
+
 /**
  * FormValidator - Handles form validation with custom rules
  */
@@ -9,6 +11,15 @@ export default class FormValidator {
         if (value === null || value === undefined) return 'This field is required';
         if (Array.isArray(value) && value.length === 0) return 'This field is required';
         if (typeof value === 'string' && value.trim().length === 0) return 'This field is required';
+        if (typeof value === 'object') {
+          const populatedValues = Object.values(value).filter((item) => {
+            if (item === null || item === undefined) return false;
+            if (typeof item === 'string') return item.trim().length > 0;
+            return true;
+          });
+
+          if (populatedValues.length === 0) return 'This field is required';
+        }
         return null;
       },
       email: (value) => {
@@ -155,6 +166,10 @@ export default class FormValidator {
     schema.forEach(section => {
       if (section.fields) {
         section.fields.forEach(field => {
+          if (!shouldShowField(field, formData)) {
+            return;
+          }
+
           const value = formData[field.name];
           const error = this.validateField(field.name, value, field, formData);
           if (error) {

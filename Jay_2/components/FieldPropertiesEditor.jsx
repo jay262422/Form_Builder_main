@@ -77,15 +77,15 @@ export default function FieldPropertiesEditor({
           minLength: field.validation?.minLength || '',
           maxLength: field.validation?.maxLength || '',
           pattern: field.validation?.pattern || '',
-          min: field.validation?.min || '',
-          max: field.validation?.max || '',
+          min: field.validation?.min || field.minDate || field.minTime || '',
+          max: field.validation?.max || field.maxDate || field.maxTime || '',
           step: field.validation?.step || '',
           customValidation: field.validation?.custom || '',
           customMessage: field.validation?.customMessage || '',
-          maxFileSize: field.validation?.maxFileSize || '',
-          allowedExtensions: field.validation?.allowedExtensions || '',
-          minDate: field.validation?.minDate || '',
-          maxDate: field.validation?.maxDate || ''
+          maxFileSize: field.validation?.maxFileSize || (field.maxSize ? field.maxSize / (1024 * 1024) : ''),
+          allowedExtensions: field.validation?.allowedExtensions || field.accept || '',
+          minDate: field.validation?.minDate || field.minDate || '',
+          maxDate: field.validation?.maxDate || field.maxDate || ''
         },
         
         styling: {
@@ -128,6 +128,32 @@ export default function FieldPropertiesEditor({
 
   // Save changes
   const handleSave = () => {
+    const normalizedValidation = {
+      ...formData.validation
+    };
+
+    const normalizedFieldProps = {};
+
+    if (field?.type === 'file') {
+      if (normalizedValidation.allowedExtensions) {
+        normalizedFieldProps.accept = normalizedValidation.allowedExtensions;
+      }
+
+      if (normalizedValidation.maxFileSize) {
+        normalizedFieldProps.maxSize = Number(normalizedValidation.maxFileSize) * 1024 * 1024;
+      }
+    }
+
+    if (field?.type === 'date') {
+      normalizedFieldProps.minDate = normalizedValidation.min || normalizedValidation.minDate || '';
+      normalizedFieldProps.maxDate = normalizedValidation.max || normalizedValidation.maxDate || '';
+    }
+
+    if (field?.type === 'time') {
+      normalizedFieldProps.minTime = normalizedValidation.min || '';
+      normalizedFieldProps.maxTime = normalizedValidation.max || '';
+    }
+
     const updatedField = {
       ...field,
       name: formData.name,
@@ -137,13 +163,14 @@ export default function FieldPropertiesEditor({
       disabled: formData.disabled,
       helpText: formData.helpText,
       defaultValue: formData.defaultValue,
-      validation: formData.validation,
+      validation: normalizedValidation,
       styling: formData.styling,
       dependsOn: formData.advanced.dependsOn,
       condition: formData.advanced.condition,
       showWhen: formData.advanced.showWhen,
       calculateFrom: formData.advanced.calculateFrom,
-      calculation: formData.advanced.calculation
+      calculation: formData.advanced.calculation,
+      ...normalizedFieldProps
     };
 
     console.log('🔍 FieldPropertiesEditor: Saving field with condition:', updatedField.name, 'Condition:', updatedField.condition, 'Condition type:', typeof updatedField.condition);

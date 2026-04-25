@@ -176,8 +176,6 @@ export function findFieldInSchema(schema, fieldName) {
  * @returns {boolean} - True if it should be step-by-step
  */
 export function isStepByStepForm(form) {
-  const schema = form.schema?.sections || form.schema || [];
-  
   // Check if formType is explicitly set to 'wizard' (either at form level or schema level)
   if (form.formType === 'wizard' || form.schema?.formType === 'wizard') {
     return true;
@@ -196,17 +194,8 @@ export function isStepByStepForm(form) {
       (form.schema?.formType && stepByStepFormTypes.includes(form.schema.formType))) {
     return true;
   }
-  
-  // Check form name for keywords (only for specific step-by-step forms)
-  const stepKeywords = ['onboarding', 'registration', 'wizard', 'step', 'multi-step'];
-  const formName = (form.name || '').toLowerCase();
-  
-  if (stepKeywords.some(keyword => formName.includes(keyword))) {
-    return true;
-  }
-  
+
   // Only treat as step-by-step if explicitly configured that way
-  // Don't auto-detect based on multiple sections alone
   return false;
 }
 

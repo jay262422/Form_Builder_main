@@ -160,10 +160,14 @@ function isValidEmail(email) {
  */
 function isValidFile(file, field) {
   if (!file) return true;
+  const effectiveAccept = field.accept || field.validation?.allowedExtensions;
+  const effectiveMaxSize = field.maxSize || (
+    field.validation?.maxFileSize ? Number(field.validation.maxFileSize) * 1024 * 1024 : null
+  );
   
   // Check file type
-  if (field.accept) {
-    const acceptedTypes = field.accept.split(',').map(type => type.trim());
+  if (effectiveAccept) {
+    const acceptedTypes = effectiveAccept.split(',').map(type => type.trim());
     const isValidType = acceptedTypes.some(type => {
       if (type.startsWith('.')) {
         return file.name.toLowerCase().endsWith(type.toLowerCase());
@@ -174,7 +178,7 @@ function isValidFile(file, field) {
   }
   
   // Check file size
-  if (field.maxSize && file.size > field.maxSize) {
+  if (effectiveMaxSize && file.size > effectiveMaxSize) {
     return false;
   }
   

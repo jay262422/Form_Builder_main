@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import FormField from './FormField';
 import { getFormUI, getFieldWidthClass, getSectionStyleClasses } from '../utils/uiHelpers';
+import { shouldShowField } from '../utils/conditionHelpers';
 
 /**
  * LayoutAwareFormSection - Form section that applies layout settings
@@ -85,7 +86,11 @@ export default function LayoutAwareFormSection({
     return rows;
   };
 
-  const fieldRows = groupFieldsByRows(section.fields || []);
+  const visibleFields = useMemo(() => (
+    (section.fields || []).filter((field) => shouldShowField(field, formData))
+  ), [section.fields, formData]);
+
+  const fieldRows = groupFieldsByRows(visibleFields);
 
   // Render section with or without container
   const sectionContent = (
@@ -114,12 +119,12 @@ export default function LayoutAwareFormSection({
               <div key={field.name} className={`px-2 mb-4 ${getFieldWidthClassLocal(field.name)}`}>
                 <FormField
                   field={field}
-                  value={formData[field.name] || ''}
+                  value={formData[field.name] ?? ''}
                   error={errors[field.name]}
                   touched={touched[field.name]}
                   onChange={(value) => onFieldChange(field.name, value)}
                   onBlur={() => onFieldBlur(field.name)}
-                  disabled={disabled}
+                  disabled={disabled || field.disabled}
                   formData={formData}
                   formTheme={formTheme}
                 />
