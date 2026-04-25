@@ -10,6 +10,12 @@ import workspaceService from '../../services/workspaceService';
 import auditLogService from '../../services/auditLogService';
 
 const MEMBER_ROLES = ['admin', 'editor', 'viewer'];
+const fieldClassName = 'mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 disabled:cursor-not-allowed disabled:bg-slate-100';
+const sectionClassName = 'rounded-[1.75rem] border border-white/70 bg-white/85 p-6 shadow-[0_24px_90px_-45px_rgba(15,23,42,0.45)] backdrop-blur';
+const primaryButtonClassName = 'rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60';
+const secondaryButtonClassName = 'rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60';
+const successButtonClassName = 'rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60';
+const dangerButtonClassName = 'rounded-2xl bg-red-100 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-200';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -79,6 +85,7 @@ export default function SettingsPage() {
 
   const myWorkspaceRole = useMemo(() => user?.workspaceRole || 'viewer', [user]);
   const canManageWorkspace = myWorkspaceRole === 'owner' || myWorkspaceRole === 'admin';
+  const workspaceLabel = workspaceData?.name || 'Personal workspace';
 
   const loadAuditLogs = async (page = 1) => {
     setAuditError('');
@@ -261,43 +268,52 @@ export default function SettingsPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50 py-6 px-4">
-        <div className="max-w-5xl mx-auto space-y-6">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.12),_transparent_24%),radial-gradient(circle_at_top_right,_rgba(14,165,233,0.12),_transparent_24%),linear-gradient(180deg,_#f8fafc_0%,_#fff7ed_48%,_#ffffff_100%)] py-8 px-4">
+        <div className="max-w-6xl mx-auto space-y-6">
+          <div className="flex flex-col gap-4 rounded-[1.75rem] border border-white/70 bg-white/85 px-5 py-4 shadow-[0_24px_90px_-45px_rgba(15,23,42,0.45)] backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-600">Settings</div>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">{user?.name || user?.email || 'User'}</span>
+                <span className="text-slate-300">|</span>
+                <span>{workspaceLabel}</span>
+                <span className="text-slate-300">|</span>
+                <span className="capitalize">{myWorkspaceRole}</span>
+              </div>
+            </div>
             <button
               onClick={() => router.push('/')}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+              className={secondaryButtonClassName}
             >
               Back to Dashboard
             </button>
           </div>
 
-          {message && <div className="p-3 text-sm text-green-800 bg-green-100 rounded-md">{message}</div>}
-          {error && <div className="p-3 text-sm text-red-800 bg-red-100 rounded-md">{error}</div>}
+          {message && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{message}</div>}
+          {error && <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{error}</div>}
 
-          <div className="bg-white rounded-lg border border-gray-200 p-2">
+          <div className="rounded-[1.75rem] border border-white/70 bg-white/85 p-3 shadow-[0_24px_90px_-45px_rgba(15,23,42,0.45)] backdrop-blur">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               <button
                 onClick={() => setActiveTab('profile')}
-                className={`px-3 py-2 rounded-md text-sm font-medium ${
-                  activeTab === 'profile' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                  activeTab === 'profile' ? 'bg-slate-950 text-white shadow-lg' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
                 Profile
               </button>
               <button
                 onClick={() => setActiveTab('workspace')}
-                className={`px-3 py-2 rounded-md text-sm font-medium ${
-                  activeTab === 'workspace' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                  activeTab === 'workspace' ? 'bg-slate-950 text-white shadow-lg' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
                 Workspace
               </button>
               <button
                 onClick={() => setActiveTab('security')}
-                className={`px-3 py-2 rounded-md text-sm font-medium ${
-                  activeTab === 'security' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                  activeTab === 'security' ? 'bg-slate-950 text-white shadow-lg' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
                 Security
@@ -305,8 +321,8 @@ export default function SettingsPage() {
               {canManageWorkspace && (
                 <button
                   onClick={() => setActiveTab('audit')}
-                  className={`px-3 py-2 rounded-md text-sm font-medium ${
-                    activeTab === 'audit' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                    activeTab === 'audit' ? 'bg-slate-950 text-white shadow-lg' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
                   Audit
@@ -316,59 +332,60 @@ export default function SettingsPage() {
           </div>
 
           {activeTab === 'profile' && (
-          <section className="bg-white rounded-lg border border-gray-200 p-5">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Profile</h2>
+          <section className={sectionClassName}>
+            <h2 className="mb-2 text-xl font-semibold text-slate-950">Profile</h2>
+            <p className="mb-5 text-sm text-slate-600">Update the personal details shown across your workspace.</p>
             <form onSubmit={handleProfileSave} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <label className="text-sm text-gray-700">
+              <label className="text-sm font-medium text-slate-700">
                 Full Name
                 <input
                   type="text"
-                  className="mt-1 w-full border rounded-md px-3 py-2"
+                  className={fieldClassName}
                   value={profileForm.name}
                   onChange={(e) => setProfileForm(prev => ({ ...prev, name: e.target.value }))}
                 />
               </label>
-              <label className="text-sm text-gray-700">
+              <label className="text-sm font-medium text-slate-700">
                 Timezone
                 <input
                   type="text"
-                  className="mt-1 w-full border rounded-md px-3 py-2"
+                  className={fieldClassName}
                   value={profileForm.timezone}
                   onChange={(e) => setProfileForm(prev => ({ ...prev, timezone: e.target.value }))}
                   placeholder="e.g. Asia/Kolkata"
                 />
               </label>
-              <label className="text-sm text-gray-700">
+              <label className="text-sm font-medium text-slate-700">
                 Job Title
                 <input
                   type="text"
-                  className="mt-1 w-full border rounded-md px-3 py-2"
+                  className={fieldClassName}
                   value={profileForm.title}
                   onChange={(e) => setProfileForm(prev => ({ ...prev, title: e.target.value }))}
                 />
               </label>
-              <label className="text-sm text-gray-700">
+              <label className="text-sm font-medium text-slate-700">
                 Company
                 <input
                   type="text"
-                  className="mt-1 w-full border rounded-md px-3 py-2"
+                  className={fieldClassName}
                   value={profileForm.company}
                   onChange={(e) => setProfileForm(prev => ({ ...prev, company: e.target.value }))}
                 />
               </label>
-              <label className="text-sm text-gray-700 md:col-span-2">
+              <label className="text-sm font-medium text-slate-700 md:col-span-2">
                 Phone
                 <input
                   type="text"
-                  className="mt-1 w-full border rounded-md px-3 py-2"
+                  className={fieldClassName}
                   value={profileForm.phone}
                   onChange={(e) => setProfileForm(prev => ({ ...prev, phone: e.target.value }))}
                 />
               </label>
-              <label className="text-sm text-gray-700 md:col-span-2">
+              <label className="text-sm font-medium text-slate-700 md:col-span-2">
                 Bio
                 <textarea
-                  className="mt-1 w-full border rounded-md px-3 py-2"
+                  className={fieldClassName}
                   rows={3}
                   value={profileForm.bio}
                   onChange={(e) => setProfileForm(prev => ({ ...prev, bio: e.target.value }))}
@@ -378,7 +395,7 @@ export default function SettingsPage() {
                 <button
                   type="submit"
                   disabled={isSavingProfile}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-60"
+                  className={primaryButtonClassName}
                 >
                   {isSavingProfile ? 'Saving...' : 'Save Profile'}
                 </button>
@@ -388,32 +405,33 @@ export default function SettingsPage() {
           )}
 
           {activeTab === 'security' && (
-          <section className="bg-white rounded-lg border border-gray-200 p-5">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Change Password</h2>
+          <section className={sectionClassName}>
+            <h2 className="mb-2 text-xl font-semibold text-slate-950">Change Password</h2>
+            <p className="mb-5 text-sm text-slate-600">Keep your account secure with a fresh password when needed.</p>
             <form onSubmit={handlePasswordChange} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <label className="text-sm text-gray-700">
+              <label className="text-sm font-medium text-slate-700">
                 Current Password
                 <input
                   type="password"
-                  className="mt-1 w-full border rounded-md px-3 py-2"
+                  className={fieldClassName}
                   value={passwordForm.currentPassword}
                   onChange={(e) => setPasswordForm(prev => ({ ...prev, currentPassword: e.target.value }))}
                 />
               </label>
-              <label className="text-sm text-gray-700">
+              <label className="text-sm font-medium text-slate-700">
                 New Password
                 <input
                   type="password"
-                  className="mt-1 w-full border rounded-md px-3 py-2"
+                  className={fieldClassName}
                   value={passwordForm.newPassword}
                   onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
                 />
               </label>
-              <label className="text-sm text-gray-700">
+              <label className="text-sm font-medium text-slate-700">
                 Confirm Password
                 <input
                   type="password"
-                  className="mt-1 w-full border rounded-md px-3 py-2"
+                  className={fieldClassName}
                   value={passwordForm.confirmPassword}
                   onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
                 />
@@ -422,7 +440,7 @@ export default function SettingsPage() {
                 <button
                   type="submit"
                   disabled={isChangingPassword}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-60"
+                  className={primaryButtonClassName}
                 >
                   {isChangingPassword ? 'Updating...' : 'Update Password'}
                 </button>
@@ -432,16 +450,16 @@ export default function SettingsPage() {
           )}
 
           {activeTab === 'workspace' && (
-          <section className="bg-white rounded-lg border border-gray-200 p-5">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Workspace</h2>
-            <p className="text-sm text-gray-600 mb-4">Your role: <span className="font-medium">{myWorkspaceRole}</span></p>
+          <section className={sectionClassName}>
+            <h2 className="mb-2 text-xl font-semibold text-slate-950">Workspace</h2>
+            <p className="mb-4 text-sm text-slate-600">Your role: <span className="font-semibold capitalize text-slate-900">{myWorkspaceRole}</span></p>
 
             <form onSubmit={handleWorkspaceUpdate} className="flex items-end gap-3 mb-6">
-              <label className="flex-1 text-sm text-gray-700">
+              <label className="flex-1 text-sm font-medium text-slate-700">
                 Workspace Name
                 <input
                   type="text"
-                  className="mt-1 w-full border rounded-md px-3 py-2"
+                  className={fieldClassName}
                   value={workspaceName}
                   onChange={(e) => setWorkspaceName(e.target.value)}
                   disabled={!canManageWorkspace}
@@ -450,7 +468,7 @@ export default function SettingsPage() {
               <button
                 type="submit"
                 disabled={!canManageWorkspace || isSavingWorkspace}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-60"
+                className={primaryButtonClassName}
               >
                 {isSavingWorkspace ? 'Saving...' : 'Save'}
               </button>
@@ -458,19 +476,19 @@ export default function SettingsPage() {
 
             {canManageWorkspace && (
               <form onSubmit={handleInviteMember} className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
-                <label className="md:col-span-2 text-sm text-gray-700">
+                <label className="md:col-span-2 text-sm font-medium text-slate-700">
                   Invite by Email
                   <input
                     type="email"
-                    className="mt-1 w-full border rounded-md px-3 py-2"
+                    className={fieldClassName}
                     value={inviteForm.email}
                     onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
                   />
                 </label>
-                <label className="text-sm text-gray-700">
+                <label className="text-sm font-medium text-slate-700">
                   Role
                   <select
-                    className="mt-1 w-full border rounded-md px-3 py-2"
+                    className={fieldClassName}
                     value={inviteForm.role}
                     onChange={(e) => setInviteForm(prev => ({ ...prev, role: e.target.value }))}
                   >
@@ -483,7 +501,7 @@ export default function SettingsPage() {
                   <button
                     type="submit"
                     disabled={isInviting}
-                    className="w-full px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 disabled:opacity-60"
+                    className={`w-full ${successButtonClassName}`}
                   >
                     {isInviting ? 'Inviting...' : 'Invite'}
                   </button>
@@ -492,11 +510,11 @@ export default function SettingsPage() {
             )}
 
             <form onSubmit={handleAcceptInvite} className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
-              <label className="md:col-span-3 text-sm text-gray-700">
+              <label className="md:col-span-3 text-sm font-medium text-slate-700">
                 Accept Invite Token
                 <input
                   type="text"
-                  className="mt-1 w-full border rounded-md px-3 py-2"
+                  className={fieldClassName}
                   value={acceptInviteToken}
                   onChange={(e) => setAcceptInviteToken(e.target.value)}
                   placeholder="Paste invite token here"
@@ -505,16 +523,16 @@ export default function SettingsPage() {
               <div className="flex items-end">
                 <button
                   type="submit"
-                  className="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+                  className={`w-full ${primaryButtonClassName}`}
                 >
                   Accept Invite
                 </button>
               </div>
             </form>
 
-            <div className="border rounded-md overflow-hidden">
+            <div className="overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white">
               <table className="w-full text-sm">
-                <thead className="bg-gray-100">
+                <thead className="bg-slate-100">
                   <tr>
                     <th className="text-left px-3 py-2">Member</th>
                     <th className="text-left px-3 py-2">Role</th>
@@ -532,7 +550,7 @@ export default function SettingsPage() {
                       <td className="px-3 py-2">
                         {canManageWorkspace && member.status === 'active' && member.role !== 'owner' && member.userId ? (
                           <select
-                            className="border rounded-md px-2 py-1"
+                            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
                             value={member.role}
                             onChange={(e) => handleUpdateMemberRole(member.userId, e.target.value)}
                           >
@@ -549,7 +567,7 @@ export default function SettingsPage() {
                         {canManageWorkspace && member.status === 'active' && member.role !== 'owner' && member.userId && (
                           <button
                             onClick={() => handleRemoveMember(member.userId)}
-                            className="px-3 py-1 text-xs font-medium text-red-700 bg-red-100 rounded-md hover:bg-red-200"
+                            className={dangerButtonClassName}
                           >
                             Remove
                           </button>
@@ -564,26 +582,29 @@ export default function SettingsPage() {
           )}
 
           {activeTab === 'audit' && canManageWorkspace && (
-            <section className="bg-white rounded-lg border border-gray-200 p-5">
+            <section className={sectionClassName}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Audit Logs</h2>
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-950">Audit Logs</h2>
+                  <p className="mt-1 text-sm text-slate-600">Track workspace changes, actions, and access events.</p>
+                </div>
                 <button
                   onClick={() => loadAuditLogs(auditPagination.page || 1)}
-                  className="px-3 py-2 text-xs font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                  className={secondaryButtonClassName}
                 >
                   Refresh
                 </button>
               </div>
 
               {auditError && (
-                <div className="mb-4 p-3 text-sm text-red-800 bg-red-100 rounded-md">
+                <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
                   {auditError}
                 </div>
               )}
 
-              <div className="border rounded-md overflow-x-auto">
+              <div className="overflow-x-auto rounded-[1.5rem] border border-slate-200 bg-white">
                 <table className="w-full text-sm min-w-[780px]">
-                  <thead className="bg-gray-100">
+                  <thead className="bg-slate-100">
                     <tr>
                       <th className="text-left px-3 py-2">Time</th>
                       <th className="text-left px-3 py-2">Action</th>
@@ -636,14 +657,14 @@ export default function SettingsPage() {
                   <button
                     onClick={() => loadAuditLogs((auditPagination.page || 1) - 1)}
                     disabled={(auditPagination.page || 1) <= 1 || isLoadingAuditLogs}
-                    className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-50"
+                    className={`${secondaryButtonClassName} px-3 py-2`}
                   >
                     Previous
                   </button>
                   <button
                     onClick={() => loadAuditLogs((auditPagination.page || 1) + 1)}
                     disabled={(auditPagination.page || 1) >= (auditPagination.totalPages || 1) || isLoadingAuditLogs}
-                    className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-50"
+                    className={`${secondaryButtonClassName} px-3 py-2`}
                   >
                     Next
                   </button>

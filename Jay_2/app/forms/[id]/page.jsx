@@ -176,22 +176,6 @@ export default function PublishedFormPage() {
             </div>
             <h1 className="mt-4 text-3xl font-bold">{form.name}</h1>
             {form.description && <p className="mt-2 max-w-2xl text-slate-300">{form.description}</p>}
-            {requiresLogin && (
-              <div className="mt-5 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-4">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-amber-200">Before you start</div>
-                <div className="mt-2 text-sm text-amber-50">
-                  This form requires sign-in before you can submit a response.
-                </div>
-                {shouldBlockForAuth && (
-                  <button
-                    onClick={() => router.push("/login")}
-                    className="mt-4 rounded-lg bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
-                  >
-                    Go to login
-                  </button>
-                )}
-              </div>
-            )}
           </div>
           <div className="px-8 py-8">
             {authLoading ? (
