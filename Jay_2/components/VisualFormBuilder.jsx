@@ -10,6 +10,62 @@ import FormBuilder from '../FormBuilder';
 import FormWizard from './FormWizard';
 import { builderThemeConfigs } from '../utils/themeConfigs';
 
+const FIELD_LIBRARY_GROUPS = [
+  { id: 'basic', label: 'Basic inputs', short: 'Basic' },
+  { id: 'selection', label: 'Choices', short: 'Choices' },
+  { id: 'special', label: 'Special', short: 'Special' },
+  { id: 'advanced', label: 'Advanced', short: 'Advanced' }
+];
+
+const PLACEHOLDER_FIELD_TYPES = new Set([
+  'text', 'email', 'password', 'phone', 'number', 'url', 'textarea',
+  'select', 'multiselect', 'phone_advanced', 'currency', 'percentage', 'date', 'time'
+]);
+
+const TEXT_VALIDATION_FIELD_TYPES = new Set([
+  'text', 'email', 'password', 'phone', 'url', 'textarea', 'phone_advanced'
+]);
+
+const canvasFieldPreview = (field) => {
+  const optionLabels = (field.options || []).slice(0, 3).map((option) => option.label).filter(Boolean);
+  switch (field.type) {
+    case 'textarea':
+      return field.placeholder || 'Long answer';
+    case 'select':
+    case 'multiselect':
+      return field.placeholder || `${field.options?.length || 0} options`;
+    case 'radio':
+      return optionLabels.join(' · ') || 'Choices';
+    case 'file':
+      return 'Upload a file';
+    case 'signature':
+      return 'Sign here';
+    case 'rating':
+      return `${field.maxRating || 5} stars`;
+    case 'date':
+      return 'Select a date';
+    case 'time':
+      return 'Select a time';
+    case 'range':
+      return `${field.min ?? 0} – ${field.max ?? 100}`;
+    case 'color':
+      return field.defaultValue || 'Pick a color';
+    case 'calculated':
+      return field.formula || 'Calculated value';
+    case 'repeater':
+      return 'Repeating group';
+    case 'address':
+      return 'Street, city, region';
+    case 'checkbox':
+    case 'toggle':
+      return null;
+    default:
+      return field.placeholder || null;
+  }
+};
+
+const EMPTY_INITIAL_SCHEMA = [];
+
 const moveArrayItem = (items, fromIndex, toIndex) => {
   if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) {
     return items;
@@ -27,12 +83,13 @@ const moveArrayItem = (items, fromIndex, toIndex) => {
  */
 export default function VisualFormBuilder({
   onSchemaChange,
-  initialSchema = [],
+  initialSchema = EMPTY_INITIAL_SCHEMA,
   className = "",
   isStandalone = true,
   onSave,
   onCancel,
-  onDirtyChange
+  onDirtyChange,
+  appearance = 'default'
 }) {
   const [schema, setSchema] = useState(() => {
     // Handle both old and new schema formats for initial state
@@ -59,11 +116,14 @@ export default function VisualFormBuilder({
   const [isSaving, setIsSaving] = useState(false);
   const [dynamicModalKey, setDynamicModalKey] = useState(0);
   const [rightPanelTab, setRightPanelTab] = useState('properties');
+  const [libraryQuery, setLibraryQuery] = useState('');
+  const [libraryCategory, setLibraryCategory] = useState('all');
   const [canvasMode, setCanvasMode] = useState('build');
   const [structureDragState, setStructureDragState] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastDraftSavedAt, setLastDraftSavedAt] = useState(null);
   const autosaveTimeoutRef = React.useRef(null);
+  const libraryDraggedRef = React.useRef(false);
 
   // Form type selection
   const [formType, setFormType] = useState(() => {
@@ -817,6 +877,7 @@ return mappingData[parentValue] || [];`;
     };
     const newSchema = [...schema, newSection];
     setSchema(newSchema);
+    setSelectedSection(newSchema.length - 1);
     markDirty();
     
     // ✅ Notify parent with prepared schema
@@ -843,8 +904,10 @@ return mappingData[parentValue] || [];`;
     
     setSchema(newSchema);
     markDirty();
+    setSelectedSection(sectionIndex);
     setSelectedField(`${sectionIndex}-${newFieldIndex}`);
     setRightPanelTab('properties');
+    setCanvasMode('build');
     
     // ✅ Notify parent with prepared schema
     const preparedSchema = prepareSchemaForSave(newSchema);
@@ -918,6 +981,14 @@ return mappingData[parentValue] || [];`;
     newSchema.splice(sectionIndex, 1);
     setSchema(newSchema);
     markDirty();
+    setSelectedSection((current) => {
+      if (current === null || current === undefined) return null;
+      if (current === sectionIndex) {
+        return newSchema.length ? Math.min(sectionIndex, newSchema.length - 1) : null;
+      }
+      if (current > sectionIndex) return current - 1;
+      return current;
+    });
     setSelectedField((current) => {
       if (!current) return null;
       const [currentSection, currentField] = String(current).split('-').map((value) => parseInt(value, 10));
@@ -1086,8 +1157,63 @@ return mappingData[parentValue] || [];`;
     setIsDragging(false);
   }, []);
 
+  const moveSection = useCallback((fromIndex, toIndex) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= schema.length || toIndex >= schema.length) {
+      return;
+    }
+
+    const newSchema = moveArrayItem(schema, fromIndex, toIndex);
+    setSchema(newSchema);
+    markDirty();
+    setSelectedSection(toIndex);
+    setSelectedField((current) => {
+      if (!current) return null;
+      const [currentSection, currentField] = String(current).split('-').map((value) => parseInt(value, 10));
+      if (Number.isNaN(currentSection) || Number.isNaN(currentField)) return null;
+      if (currentSection === fromIndex) return `${toIndex}-${currentField}`;
+      if (fromIndex < currentSection && currentSection <= toIndex) return `${currentSection - 1}-${currentField}`;
+      if (toIndex <= currentSection && currentSection < fromIndex) return `${currentSection + 1}-${currentField}`;
+      return current;
+    });
+
+    const preparedSchema = prepareSchemaForSave(newSchema);
+    onSchemaChange?.({ formType, formTheme, sections: preparedSchema });
+  }, [schema, onSchemaChange, prepareSchemaForSave, formType, formTheme]);
+
+  const addFieldFromLibrary = useCallback((fieldType) => {
+    const fieldTypeData = fieldTypes.find((item) => item.type === fieldType);
+    if (!fieldTypeData) return;
+
+    const existingIndex = selectedSection !== null && schema[selectedSection]
+      ? selectedSection
+      : (schema.length > 0 ? schema.length - 1 : null);
+
+    if (existingIndex !== null) {
+      addField(existingIndex, fieldType);
+      return;
+    }
+
+    const newField = {
+      ...fieldTypeData.defaultProps,
+      name: `${fieldType}_${Date.now()}`
+    };
+    const newSchema = [{
+      title: 'Section 1',
+      description: '',
+      fields: [newField]
+    }];
+    setSchema(newSchema);
+    markDirty();
+    setSelectedSection(0);
+    setSelectedField('0-0');
+    setRightPanelTab('properties');
+    setCanvasMode('build');
+    onSchemaChange?.({ formType, formTheme, sections: prepareSchemaForSave(newSchema) });
+  }, [addField, fieldTypes, formTheme, formType, onSchemaChange, prepareSchemaForSave, schema, selectedSection]);
+
   // Handle drop on section
   const handleDrop = useCallback((sectionIndex, fieldType) => {
+    setSelectedSection(sectionIndex);
     addField(sectionIndex, fieldType);
   }, [addField]);
 
@@ -1973,43 +2099,68 @@ return mappingData[parentValue] || [];`;
   const renderSelectedFieldPanel = () => {
     if (!selectedFieldContext) {
       return (
-        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600">
-          Select a field from the canvas to edit properties.
+        <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
+          <div className="text-sm font-semibold text-gray-900">No field selected</div>
+          <p className="mt-1 text-sm text-gray-600">
+            Click a field on the canvas, or add one from the library. Its label, validation, and options appear here.
+          </p>
         </div>
       );
     }
 
     const { field, section, sectionIndex, fieldIndex } = selectedFieldContext;
     const fieldTypeConfig = fieldTypes.find((ft) => ft.type === field.type);
+    const fieldCount = section?.fields?.length || 0;
+    const showPlaceholder = PLACEHOLDER_FIELD_TYPES.has(field.type);
+    const showTextValidation = TEXT_VALIDATION_FIELD_TYPES.has(field.type);
 
     return (
       <div className="space-y-4">
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-          <div className="text-xs uppercase tracking-wide text-gray-500">Selected Field</div>
-          <div className="mt-1 flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold text-gray-900">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Selected field</div>
+          <div className="mt-1 flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-gray-900">
                 {field.label || field.name || 'Untitled field'}
               </div>
-              <div className="text-xs text-gray-500">
-                Section: {section?.title || `Section ${sectionIndex + 1}`}
+              <div className="truncate text-xs text-gray-500">
+                {section?.title || `Section ${sectionIndex + 1}`}
               </div>
             </div>
             <button
+              type="button"
               onClick={() => removeField(sectionIndex, fieldIndex)}
-              className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-200"
+              className="shrink-0 rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-200"
             >
               Remove
             </button>
           </div>
-          <div className="mt-2 inline-flex items-center rounded-full bg-white px-2 py-1 text-xs text-gray-600 border border-gray-200">
-            {fieldTypeConfig?.icon || 'Field'} {fieldTypeConfig?.label || field.type}
+          <div className="mt-2 inline-flex items-center rounded-full border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600">
+            {fieldTypeConfig?.icon || '📝'} {fieldTypeConfig?.label || field.type}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              disabled={fieldIndex === 0}
+              onClick={() => moveField(sectionIndex, fieldIndex, fieldIndex - 1)}
+              className="rounded border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Move up
+            </button>
+            <button
+              type="button"
+              disabled={fieldIndex >= fieldCount - 1}
+              onClick={() => moveField(sectionIndex, fieldIndex, fieldIndex + 1)}
+              className="rounded border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Move down
+            </button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Field Name</label>
+            <label className="mb-1 block text-xs font-medium text-gray-700">Field name</label>
             <input
               type="text"
               value={field.name || ''}
@@ -2018,7 +2169,7 @@ return mappingData[parentValue] || [];`;
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Label</label>
+            <label className="mb-1 block text-xs font-medium text-gray-700">Label</label>
             <input
               type="text"
               value={field.label || ''}
@@ -2026,15 +2177,17 @@ return mappingData[parentValue] || [];`;
               className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Placeholder</label>
-            <input
-              type="text"
-              value={field.placeholder || ''}
-              onChange={(e) => updateField(sectionIndex, fieldIndex, { placeholder: e.target.value })}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
+          {showPlaceholder && (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-700">Placeholder</label>
+              <input
+                type="text"
+                value={field.placeholder || ''}
+                onChange={(e) => updateField(sectionIndex, fieldIndex, { placeholder: e.target.value })}
+                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          )}
           <label className="flex items-center gap-2 text-sm text-gray-700">
             <input
               type="checkbox"
@@ -2044,13 +2197,13 @@ return mappingData[parentValue] || [];`;
             Required field
           </label>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Help Text</label>
+            <label className="mb-1 block text-xs font-medium text-gray-700">Help text</label>
             <input
               type="text"
               value={field.description || ''}
               onChange={(e) => updateField(sectionIndex, fieldIndex, { description: e.target.value })}
               className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              placeholder="Explain this field to users"
+              placeholder="Explain this field to respondents"
             />
           </div>
         </div>
@@ -2062,48 +2215,50 @@ return mappingData[parentValue] || [];`;
           </div>
         </div>
 
-        <div className="rounded-lg border border-gray-200 p-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-2">Validation</div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Min Length</label>
+        {showTextValidation && (
+          <div className="rounded-lg border border-gray-200 p-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">Validation</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="mb-1 block text-xs text-gray-600">Min length</label>
+                <input
+                  type="number"
+                  value={field.validation?.minLength || ''}
+                  onChange={(e) => {
+                    const validation = { ...field.validation, minLength: e.target.value ? parseInt(e.target.value, 10) : undefined };
+                    updateField(sectionIndex, fieldIndex, { validation });
+                  }}
+                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-gray-600">Max length</label>
+                <input
+                  type="number"
+                  value={field.validation?.maxLength || ''}
+                  onChange={(e) => {
+                    const validation = { ...field.validation, maxLength: e.target.value ? parseInt(e.target.value, 10) : undefined };
+                    updateField(sectionIndex, fieldIndex, { validation });
+                  }}
+                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs"
+                />
+              </div>
+            </div>
+            <div className="mt-2">
+              <label className="mb-1 block text-xs text-gray-600">Pattern (regex)</label>
               <input
-                type="number"
-                value={field.validation?.minLength || ''}
+                type="text"
+                value={field.validation?.pattern || ''}
                 onChange={(e) => {
-                  const validation = { ...field.validation, minLength: e.target.value ? parseInt(e.target.value, 10) : undefined };
+                  const validation = { ...field.validation, pattern: e.target.value || undefined };
                   updateField(sectionIndex, fieldIndex, { validation });
                 }}
                 className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Max Length</label>
-              <input
-                type="number"
-                value={field.validation?.maxLength || ''}
-                onChange={(e) => {
-                  const validation = { ...field.validation, maxLength: e.target.value ? parseInt(e.target.value, 10) : undefined };
-                  updateField(sectionIndex, fieldIndex, { validation });
-                }}
-                className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs"
+                placeholder="^[a-zA-Z0-9]+$"
               />
             </div>
           </div>
-          <div className="mt-2">
-            <label className="block text-xs text-gray-600 mb-1">Pattern (Regex)</label>
-            <input
-              type="text"
-              value={field.validation?.pattern || ''}
-              onChange={(e) => {
-                const validation = { ...field.validation, pattern: e.target.value || undefined };
-                updateField(sectionIndex, fieldIndex, { validation });
-              }}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs"
-              placeholder="^[a-zA-Z0-9]+$"
-            />
-          </div>
-        </div>
+        )}
 
         {renderFieldOptions(field, sectionIndex, fieldIndex)}
       </div>
@@ -2128,64 +2283,91 @@ return mappingData[parentValue] || [];`;
   }), [formDescription, formName, formTheme, formType, schema]);
 
   const previewEmptyState = schema.length === 0 || !schema.some((section) => (section.fields || []).length > 0);
+  const libraryQueryNormalized = libraryQuery.trim().toLowerCase();
+  const visibleFieldTypes = fieldTypes.filter((fieldType) => {
+    const matchesCategory = libraryCategory === 'all' || fieldType.category === libraryCategory;
+    const matchesQuery = !libraryQueryNormalized
+      || fieldType.label.toLowerCase().includes(libraryQueryNormalized)
+      || fieldType.type.toLowerCase().includes(libraryQueryNormalized);
+    return matchesCategory && matchesQuery;
+  });
+  const libraryGroups = (libraryCategory === 'all' ? FIELD_LIBRARY_GROUPS : FIELD_LIBRARY_GROUPS.filter((group) => group.id === libraryCategory))
+    .map((group) => ({
+      ...group,
+      fields: visibleFieldTypes.filter((fieldType) => fieldType.category === group.id)
+    }))
+    .filter((group) => group.fields.length > 0);
+  const targetSectionIndex = selectedSection !== null && schema[selectedSection]
+    ? selectedSection
+    : (schema.length > 0 ? schema.length - 1 : null);
+  const targetSectionLabel = targetSectionIndex === null
+    ? 'a new section'
+    : (schema[targetSectionIndex]?.title || `Section ${targetSectionIndex + 1}`);
 
   return (
-    <div className={`visual-form-builder flex h-full min-h-0 flex-col bg-gray-50 ${className}`}>
-      <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col px-4 py-4 lg:px-6">
-      <div className="shrink-0 border-b border-gray-200 bg-gray-50 pb-4">
-        <div className="w-full">
-          <div className="w-full rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-600">Form Builder</div>
-
-            <div className="mt-3 mb-3 flex flex-wrap items-center gap-2">
-              <input
-                type="text"
-                value={formName}
-                onChange={handleFormNameChange}
-                className="min-w-[160px] flex-1 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-lg font-semibold text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500 sm:max-w-xs"
-                placeholder="Form name"
-              />
-              <input
-                type="text"
-                value={formDescription}
-                onChange={handleFormDescriptionChange}
-                className="min-w-[160px] flex-1 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500 sm:max-w-md"
-                placeholder="Short description for this form"
-              />
-              <div
-                className="inline-flex rounded-lg border border-blue-200 bg-white p-1 shadow-sm"
-                role="group"
-                aria-label="Form display type"
+    <div className={`visual-form-builder flex h-full min-h-0 flex-col bg-gray-50 ${appearance === 'lab' ? 'builder-lab' : ''} ${className}`}>
+      <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col px-4 py-3 lg:px-6">
+      <div className="shrink-0 pb-3">
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+            <input
+              type="text"
+              value={formName}
+              onChange={handleFormNameChange}
+              aria-label="Form name"
+              className="min-w-[160px] flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-base font-semibold text-gray-900 outline-none transition hover:border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 sm:max-w-xs"
+              placeholder="Form name"
+            />
+            <input
+              type="text"
+              value={formDescription}
+              onChange={handleFormDescriptionChange}
+              aria-label="Form description"
+              className="min-w-[160px] flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-sm text-gray-600 outline-none transition hover:border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 sm:max-w-md"
+              placeholder="Short description"
+            />
+            <div
+              className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5"
+              role="group"
+              aria-label="Form display type"
+              title={formType === 'wizard' ? 'Respondents see one section at a time' : 'Respondents see every section on one page'}
+            >
+              <button
+                type="button"
+                onClick={() => handleFormTypeChange('multi-section')}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  formType === 'multi-section'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-white'
+                }`}
               >
-                <button
-                  type="button"
-                  onClick={() => handleFormTypeChange('multi-section')}
-                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                    formType === 'multi-section'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  Single Page
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFormTypeChange('wizard')}
-                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                    formType === 'wizard'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  Step-by-Step
-                </button>
-              </div>
-              <div className="ml-auto flex flex-wrap items-center gap-2">
+                Single Page
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFormTypeChange('wizard')}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  formType === 'wizard'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-white'
+                }`}
+              >
+                Step-by-Step
+              </button>
+            </div>
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                hasUnsavedChanges ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+              }`}
+              title={lastDraftSavedAt ? `Draft saved ${new Date(lastDraftSavedAt).toLocaleTimeString()}` : undefined}
+            >
+              {hasUnsavedChanges ? 'Unsaved' : 'Saved'}
+            </span>
+            <div className="ml-auto flex items-center gap-2">
               {onCancel && (
                 <button
                   type="button"
                   onClick={onCancel}
-                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
                 >
                   Cancel
                 </button>
@@ -2206,144 +2388,106 @@ return mappingData[parentValue] || [];`;
                   }}
                   disabled={isSaving}
                   data-save-form
-                  className={`rounded-lg px-4 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${theme.primary}`}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${theme.primary}`}
                 >
                   {isSaving ? 'Saving...' : (formName.trim() && !isStandalone ? 'Save changes' : 'Save form')}
                 </button>
               )}
-              </div>
-            </div>
-
-            <p className="mb-3 text-sm text-blue-700">
-              {formType === 'multi-section' ? (
-                <span><strong>Single Page:</strong> All sections visible at once</span>
-              ) : (
-                <span><strong>Step-by-Step:</strong> One section at a time</span>
-              )}
-            </p>
-
-            <div className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
-              hasUnsavedChanges
-                ? 'bg-amber-100 text-amber-800'
-                : 'bg-emerald-100 text-emerald-800'
-            }`}>
-              {hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved'}
-              {lastDraftSavedAt && (
-                <span className="ml-2 opacity-80">
-                  · Draft {new Date(lastDraftSavedAt).toLocaleTimeString()}
-                </span>
-              )}
             </div>
           </div>
-        </div>
       </div>
 
       <div className="flex min-h-0 flex-1">
-        {/* Sidebar - Field Types */}
-        <div className="w-64 bg-white border-r border-gray-200 p-4 overflow-y-auto">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Field Types</h3>
-          
-          {/* Field Categories */}
-          <div className="space-y-4">
-            {/* Basic Input Types */}
-            <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                📝 Basic Inputs
-              </h4>
-              <div className="space-y-1">
-                {fieldTypes.filter(ft => ft.category === 'basic').map((fieldType) => (
-                  <div
-                    key={fieldType.type}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, fieldType.type)}
-                    onDragEnd={handleDragEnd}
-                    className="flex items-center space-x-2 p-2 bg-gray-50 rounded cursor-move hover:bg-gray-100 transition-colors"
-                  >
-                    <span className="text-lg">{fieldType.icon}</span>
-                    <span className="text-xs font-medium text-gray-700">{fieldType.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Selection Types */}
-            <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                📋 Selection Fields
-              </h4>
-              <div className="space-y-1">
-                {fieldTypes.filter(ft => ft.category === 'selection').map((fieldType) => (
-                  <div
-                    key={fieldType.type}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, fieldType.type)}
-                    onDragEnd={handleDragEnd}
-                    className="flex items-center space-x-2 p-2 bg-gray-50 rounded cursor-move hover:bg-gray-100 transition-colors"
-                  >
-                    <span className="text-lg">{fieldType.icon}</span>
-                    <span className="text-xs font-medium text-gray-700">{fieldType.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Special Types */}
-            <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                🎯 Special Fields
-              </h4>
-              <div className="space-y-1">
-                {fieldTypes.filter(ft => ft.category === 'special').map((fieldType) => (
-                  <div
-                    key={fieldType.type}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, fieldType.type)}
-                    onDragEnd={handleDragEnd}
-                    className="flex items-center space-x-2 p-2 bg-gray-50 rounded cursor-move hover:bg-gray-100 transition-colors"
-                  >
-                    <span className="text-lg">{fieldType.icon}</span>
-                    <span className="text-xs font-medium text-gray-700">{fieldType.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Advanced Types */}
-            <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                🚀 Advanced Fields
-              </h4>
-              <div className="space-y-1">
-                {fieldTypes.filter(ft => ft.category === 'advanced').map((fieldType) => (
-                  <div
-                    key={fieldType.type}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, fieldType.type)}
-                    onDragEnd={handleDragEnd}
-                    className="flex items-center space-x-2 p-2 bg-gray-50 rounded cursor-move hover:bg-gray-100 transition-colors"
-                  >
-                    <span className="text-lg">{fieldType.icon}</span>
-                    <span className="text-xs font-medium text-gray-700">{fieldType.label}</span>
-                  </div>
-                ))}
-              </div>
+        <aside className="flex w-72 shrink-0 flex-col border-r border-gray-200 bg-white">
+          <div className="shrink-0 border-b border-gray-200 p-3">
+            <h3 className="text-sm font-semibold text-gray-900">Field library</h3>
+            <p className="mt-1 text-xs text-gray-500">
+              Click to add into <span className="font-medium text-gray-700">{targetSectionLabel}</span>, or drag onto a section.
+            </p>
+            <input
+              type="search"
+              value={libraryQuery}
+              onChange={(event) => setLibraryQuery(event.target.value)}
+              placeholder="Search fields"
+              className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+            <div className="mt-2 flex flex-wrap gap-1" role="group" aria-label="Field categories">
+              <button
+                type="button"
+                onClick={() => setLibraryCategory('all')}
+                className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                  libraryCategory === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                All
+              </button>
+              {FIELD_LIBRARY_GROUPS.map((group) => (
+                <button
+                  key={group.id}
+                  type="button"
+                  onClick={() => setLibraryCategory(group.id)}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                    libraryCategory === group.id ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {group.short}
+                </button>
+              ))}
             </div>
           </div>
-
-        </div>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3">
+            {libraryGroups.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-300 px-3 py-6 text-center text-sm text-gray-500">
+                No fields match “{libraryQuery.trim()}”.
+              </div>
+            ) : libraryGroups.map((group) => (
+              <div key={group.id}>
+                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{group.label}</h4>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {group.fields.map((fieldType) => (
+                    <button
+                      key={fieldType.type}
+                      type="button"
+                      draggable
+                      onDragStart={(event) => {
+                        libraryDraggedRef.current = true;
+                        handleDragStart(event, fieldType.type);
+                      }}
+                      onDragEnd={() => {
+                        handleDragEnd();
+                        window.setTimeout(() => {
+                          libraryDraggedRef.current = false;
+                        }, 50);
+                      }}
+                      onClick={() => {
+                        if (libraryDraggedRef.current) {
+                          libraryDraggedRef.current = false;
+                          return;
+                        }
+                        addFieldFromLibrary(fieldType.type);
+                      }}
+                      title={`Add ${fieldType.label}`}
+                      className="flex min-h-[44px] cursor-grab items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2 py-2 text-left text-xs font-medium text-gray-700 transition hover:border-blue-300 hover:bg-blue-50 active:cursor-grabbing"
+                    >
+                      <span className="shrink-0 text-base leading-none">{fieldType.icon}</span>
+                      <span className="truncate">{fieldType.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
 
         {/* Main Canvas */}
         <div className="flex-1 min-h-0 overflow-hidden bg-gray-50 p-4">
           <main className="flex h-full min-h-0 flex-col rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Canvas Workspace</h3>
-                <p className="text-sm text-gray-500">
-                  {canvasMode === 'build'
-                    ? 'Structure sections first, then add fields from the library.'
-                    : 'Live preview — this is how respondents will see the form.'}
-                </p>
-              </div>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-gray-500">
+                {canvasMode === 'build'
+                  ? 'Click a card to edit it in Properties.'
+                  : 'This is the form respondents will see.'}
+              </p>
               <div className="flex flex-wrap items-center gap-2">
                 <div
                   className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5"
@@ -2403,7 +2547,7 @@ return mappingData[parentValue] || [];`;
                   </div>
                 </div>
               ) : (
-                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <div className="builder-lab-preview rounded-xl border border-gray-200 bg-gray-50 p-4">
                   <div className="mb-3 rounded-lg border border-gray-200 bg-white px-4 py-3">
                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
                       {formType === 'wizard' ? 'Step-by-step preview' : 'Single page preview'}
@@ -2445,7 +2589,7 @@ return mappingData[parentValue] || [];`;
                 <div>
                   <div className="text-sm font-semibold uppercase tracking-[0.24em] text-gray-400">Start here</div>
                   <h4 className="mt-3 text-2xl font-semibold text-gray-900">Create your first section</h4>
-                  <p className="mt-2 text-sm text-gray-500">Then drag field types from the library into each section.</p>
+                  <p className="mt-2 text-sm text-gray-500">Then click a field in the library, or drag it into the section.</p>
                   <button
                     type="button"
                     onClick={addSection}
@@ -2460,7 +2604,14 @@ return mappingData[parentValue] || [];`;
                 {Array.isArray(schema) && schema.map((section, sectionIndex) => (
                   <div
                     key={sectionIndex}
-                    className={`rounded-lg ${theme.section}`}
+                    onClick={(event) => {
+                      const element = event.target instanceof Element ? event.target : event.target.parentElement;
+                      if (element?.closest('input, button, select, textarea, label')) return;
+                      setSelectedSection(sectionIndex);
+                    }}
+                    className={`rounded-lg ${theme.section} ${
+                      selectedSection === sectionIndex ? 'ring-2 ring-blue-400' : ''
+                    }`}
                   >
                                          {/* Section Header */}
                      <div className={`p-4 border-b ${theme.border} ${theme.secondary}`}>
@@ -2558,76 +2709,73 @@ return mappingData[parentValue] || [];`;
                     {/* Section Content */}
                     <div className="p-4">
                       <div className="space-y-4">
-                        {section.fields?.map((field, fieldIndex) => (
+                        {section.fields?.map((field, fieldIndex) => {
+                          const fieldTypeConfig = fieldTypes.find((item) => item.type === field.type);
+                          const previewText = canvasFieldPreview(field);
+                          const isSelected = selectedField === `${sectionIndex}-${fieldIndex}`;
+                          const hasOptions = ['select', 'multiselect', 'radio', 'checkbox', 'rating'].includes(field.type);
+
+                          return (
                           <div
-                            key={fieldIndex}
-                            className={`p-4 border border-gray-200 rounded-lg ${
-                              selectedField === `${sectionIndex}-${fieldIndex}` ? 'ring-2 ring-blue-500' : ''
+                            key={field.name || `${sectionIndex}-${fieldIndex}`}
+                            className={`cursor-pointer rounded-lg border bg-white p-3 transition ${
+                              isSelected ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-200 hover:border-blue-300'
                             }`}
                             onClick={() => {
+                              setSelectedSection(sectionIndex);
                               setSelectedField(`${sectionIndex}-${fieldIndex}`);
                               setRightPanelTab('properties');
                             }}
                           >
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center space-x-2">
-                                <span className="text-lg">
-                                  {fieldTypes.find(ft => ft.type === field.type)?.icon || '📝'}
-                                </span>
-                                <span className="text-sm font-medium text-gray-700">
-                                  {fieldTypes.find(ft => ft.type === field.type)?.label || 'Field'}
-                                </span>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                  <span aria-hidden="true">{fieldTypeConfig?.icon || '📝'}</span>
+                                  <span>{fieldTypeConfig?.label || field.type}</span>
+                                </div>
+                                <div className="mt-1 text-sm font-semibold text-gray-900">
+                                  {field.label || 'Untitled field'}
+                                  {field.required && <span className="text-red-500"> *</span>}
+                                </div>
+                                {field.description && (
+                                  <p className="mt-0.5 text-xs text-gray-500">{field.description}</p>
+                                )}
+                                {previewText && (
+                                  <div className="mt-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-400">
+                                    {previewText}
+                                  </div>
+                                )}
                               </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  removeField(sectionIndex, fieldIndex);
-                                }}
-                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="Remove field"
-                              >
-                                🗑️
-                              </button>
-                            </div>
-
-                            <div className="flex items-center gap-2 text-xs text-gray-600">
-                              <span className="rounded-full bg-gray-100 px-2 py-1">
-                                Name: {field.name || '-'}
-                              </span>
-                              <span className="rounded-full bg-gray-100 px-2 py-1">
-                                Label: {field.label || '-'}
-                              </span>
-                              {field.required && (
-                                <span className="rounded-full bg-red-100 px-2 py-1 text-red-700">
-                                  Required
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedField(`${sectionIndex}-${fieldIndex}`);
-                                  setRightPanelTab('properties');
-                                }}
-                                className="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-200"
-                              >
-                                Edit In Properties Panel
-                              </button>
-                              {(field.type === 'select' || field.type === 'multiselect' || field.type === 'radio' || field.type === 'checkbox' || field.type === 'rating') && (
+                              <div className="flex shrink-0 items-center gap-1">
+                                {hasOptions && (
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleOpenOptionsEditor(sectionIndex, fieldIndex);
+                                    }}
+                                    className="rounded px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100"
+                                  >
+                                    Options
+                                  </button>
+                                )}
                                 <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenOptionsEditor(sectionIndex, fieldIndex);
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    removeField(sectionIndex, fieldIndex);
                                   }}
-                                  className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 hover:bg-gray-200"
+                                  className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                                  title="Remove field"
+                                  aria-label="Remove field"
                                 >
-                                  Options
+                                  🗑️
                                 </button>
-                              )}
+                              </div>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
 
                         {/* Drop Zone */}
                         <div
@@ -2656,79 +2804,123 @@ return mappingData[parentValue] || [];`;
           </main>
         </div>
 
-        {/* Right Panel */}
-        <div className="w-96 bg-white border-l border-gray-200 p-4 overflow-y-auto">
-          <h3 className="text-lg font-semibold text-gray-900 mb-1">Builder Workspace</h3>
-          <p className="text-xs text-gray-500 mb-4">Edit field properties or inspect form structure.</p>
-          <div className="mb-4 grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setRightPanelTab('properties')}
-              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                rightPanelTab === 'properties'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Properties
-            </button>
-            <button
-              onClick={() => setRightPanelTab('structure')}
-              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                rightPanelTab === 'structure'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Structure
-            </button>
+        <aside className="flex w-96 shrink-0 flex-col border-l border-gray-200 bg-white">
+          <div className="shrink-0 border-b border-gray-200 p-4">
+            <h3 className="text-sm font-semibold text-gray-900">Inspector</h3>
+            <p className="mt-1 text-xs text-gray-500">
+              {rightPanelTab === 'properties'
+                ? 'Edit the selected field.'
+                : 'Choose where new fields land, and reorder the form.'}
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2" role="tablist" aria-label="Inspector">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={rightPanelTab === 'properties'}
+                onClick={() => setRightPanelTab('properties')}
+                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  rightPanelTab === 'properties'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Properties
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={rightPanelTab === 'structure'}
+                onClick={() => setRightPanelTab('structure')}
+                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  rightPanelTab === 'structure'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Structure
+              </button>
+            </div>
           </div>
-
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
           {rightPanelTab === 'properties' ? (
             renderSelectedFieldPanel()
           ) : (
           <div className="space-y-4">
-            {/* Form Type Indicator */}
-            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-blue-700">Form Type:</span>
-                <span className={`px-2 py-1 text-xs rounded-full ${
-                  formType === 'wizard' 
-                    ? 'bg-purple-100 text-purple-800' 
-                    : 'bg-green-100 text-green-800'
-                }`}>
-                  {formType === 'wizard' ? '🚀 Step-by-Step' : '📄 Single Page'}
-                </span>
-              </div>
-              <div className="text-xs text-blue-600">
-                {formType === 'wizard' 
-                  ? 'Users will see one section at a time'
-                  : 'Users will see all sections at once'
-                }
-              </div>
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <span>{schema.length} sections · {Array.isArray(schema) ? schema.reduce((total, section) => total + (section.fields?.length || 0), 0) : 0} fields</span>
+              <button
+                type="button"
+                onClick={async () => {
+                  const jsonString = JSON.stringify(schema, null, 2);
+                  await navigator.clipboard.writeText(jsonString);
+                }}
+                className="font-medium text-blue-700 hover:text-blue-800"
+              >
+                Copy schema
+              </button>
             </div>
-            
-            <div className="text-sm text-gray-600">
-              <div className="mb-2">
-                <strong>Sections:</strong> {schema.length}
-              </div>
-              <div>
-                <strong>Total Fields:</strong> {Array.isArray(schema) ? schema.reduce((total, section) => total + (section.fields?.length || 0), 0) : 0}
-              </div>
-              <p className="mt-2 text-xs text-gray-500">Drag fields to reorder within a section.</p>
-            </div>
+            <p className="text-xs text-gray-500">Select a section to make it the library target. Drag a field, or use the arrows, to reorder.</p>
 
+            {schema.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
+                <div className="text-sm font-semibold text-gray-900">No sections yet</div>
+                <p className="mt-1 text-sm text-gray-600">Add a section, then drop fields into it from the library.</p>
+                <button
+                  type="button"
+                  onClick={addSection}
+                  className={`mt-3 rounded-lg px-3 py-2 text-sm font-semibold text-white ${theme.primary}`}
+                >
+                  Add section
+                </button>
+              </div>
+            ) : (
             <div className="space-y-3">
-              {Array.isArray(schema) && schema.map((section, sectionIndex) => (
-                <div key={sectionIndex} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                  <div className="font-medium text-gray-900 mb-2">{section.title || 'Untitled Section'}</div>
-                  {section.description && (
-                    <div className="text-xs text-gray-600 mb-2">{section.description}</div>
-                  )}
-                  <div className="text-xs text-gray-500 mb-2">
-                    {section.fields?.length || 0} fields
+              {schema.map((section, sectionIndex) => (
+                <div
+                  key={sectionIndex}
+                  className={`rounded-lg border p-3 ${
+                    selectedSection === sectionIndex
+                      ? 'border-blue-400 bg-blue-50 ring-2 ring-blue-100'
+                      : 'border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSection(sectionIndex)}
+                    className="w-full text-left"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-gray-900">{section.title || 'Untitled section'}</div>
+                        <div className="text-xs text-gray-500">{section.fields?.length || 0} fields</div>
+                      </div>
+                      {selectedSection === sectionIndex && (
+                        <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                          Target
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={sectionIndex === 0}
+                      onClick={() => moveSection(sectionIndex, sectionIndex - 1)}
+                      className="rounded border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Section up
+                    </button>
+                    <button
+                      type="button"
+                      disabled={sectionIndex >= schema.length - 1}
+                      onClick={() => moveSection(sectionIndex, sectionIndex + 1)}
+                      className="rounded border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Section down
+                    </button>
                   </div>
                   {section.fields && section.fields.length > 0 && (
-                    <div className="space-y-1">
+                    <div className="mt-2 space-y-1">
                       {section.fields.map((field, fieldIndex) => (
                         <div
                           key={field.name || `${sectionIndex}-${fieldIndex}`}
@@ -2750,10 +2942,11 @@ return mappingData[parentValue] || [];`;
                           }}
                           onDragEnd={() => setStructureDragState(null)}
                           onClick={() => {
+                            setSelectedSection(sectionIndex);
                             setSelectedField(`${sectionIndex}-${fieldIndex}`);
                             setRightPanelTab('properties');
                           }}
-                          className={`cursor-grab rounded border bg-white p-2 text-xs active:cursor-grabbing ${
+                          className={`flex cursor-grab items-center gap-2 rounded border bg-white p-2 text-xs active:cursor-grabbing ${
                             selectedField === `${sectionIndex}-${fieldIndex}`
                               ? 'border-blue-400 ring-2 ring-blue-100'
                               : 'border-gray-200 hover:border-blue-300'
@@ -2764,18 +2957,36 @@ return mappingData[parentValue] || [];`;
                               : ''
                           }`}
                         >
-                          <div className="flex items-center space-x-1">
-                            <span className="text-gray-400" title="Drag to reorder">⋮⋮</span>
-                            <span>{fieldTypes.find(ft => ft.type === field.type)?.icon || '📝'}</span>
-                            <span className="font-medium">{field.label || field.name || 'Unnamed Field'}</span>
-                            {field.required && <span className="text-red-500">*</span>}
-                          </div>
-                          <div className="text-gray-500 text-xs mt-1">
-                            Type: {field.type}
-                            {field.type === 'select' && field.options && (
-                              <span> ({field.options.length} options)</span>
-                            )}
-                          </div>
+                          <span className="text-gray-400" title="Drag to reorder">⋮⋮</span>
+                          <span>{fieldTypes.find((item) => item.type === field.type)?.icon || '📝'}</span>
+                          <span className="min-w-0 flex-1 truncate font-medium text-gray-800">
+                            {field.label || field.name || 'Unnamed field'}
+                            {field.required && <span className="text-red-500"> *</span>}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={fieldIndex === 0}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              moveField(sectionIndex, fieldIndex, fieldIndex - 1);
+                            }}
+                            className="rounded px-1 text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+                            aria-label="Move field up"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            disabled={fieldIndex >= section.fields.length - 1}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              moveField(sectionIndex, fieldIndex, fieldIndex + 1);
+                            }}
+                            className="rounded px-1 text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+                            aria-label="Move field down"
+                          >
+                            ↓
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -2783,51 +2994,11 @@ return mappingData[parentValue] || [];`;
                 </div>
               ))}
             </div>
-
-                         <div className="pt-4 border-t border-gray-200 space-y-2">
-                                <button
-                   onClick={async () => {
-                     try {
-                       const jsonString = JSON.stringify(schema, null, 2);
-                       await navigator.clipboard.writeText(jsonString);
-                       // Success feedback handled by parent
-                     } catch (error) {
-                       // Error feedback handled by parent
-                       throw error;
-                     }
-                   }}
-                   className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                 >
-                   Copy Schema
-                 </button>
-                               {isStandalone && (
-                  <button
-                    onClick={() => setShowSaveForm(true)}
-                    className={`w-full px-4 py-2 ${theme.primary} rounded-lg transition-colors`}
-                  >
-                    Save Form
-                  </button>
-                )}
-                {!isStandalone && onSave && (
-                  <button
-                    onClick={() => {
-                      if (formName.trim()) {
-                        handleSaveForm();
-                      } else {
-                        setShowSaveForm(true);
-                      }
-                    }}
-                    disabled={isSaving}
-                    data-save-form
-                    className={`w-full px-4 py-2 ${theme.primary} rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    {isSaving ? 'Saving...' : (formName.trim() ? 'Save Changes' : 'Save Form')}
-                  </button>
-                )}
-             </div>
+            )}
           </div>
           )}
-        </div>
+          </div>
+        </aside>
       </div>
       </div>
 
