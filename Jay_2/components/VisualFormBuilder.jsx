@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import OptionsEditor from './OptionsEditor';
-import FieldConnectionManager from './FieldConnectionManager';
 import DynamicFieldConnection from './DynamicFieldConnection';
 import FieldPropertiesEditor from './FieldPropertiesEditor';
 import RepeaterTemplateEditor from './RepeaterTemplateEditor';
@@ -9,6 +8,8 @@ import FormSection from './FormSection';
 import FormBuilder from '../FormBuilder';
 import FormWizard from './FormWizard';
 import { builderThemeConfigs } from '../utils/themeConfigs';
+import fieldOptionsService from '../services/fieldOptionsService';
+import dynamicMappingsService from '../services/dynamicMappingsService';
 
 const FIELD_LIBRARY_GROUPS = [
   { id: 'basic', label: 'Basic inputs', short: 'Basic' },
@@ -33,7 +34,7 @@ const canvasFieldPreview = (field) => {
       return field.placeholder || 'Long answer';
     case 'select':
     case 'multiselect':
-      return field.placeholder || `${field.options?.length || 0} options`;
+      return optionLabels.join(' · ') || field.placeholder || `${field.options?.length || 0} options`;
     case 'radio':
       return optionLabels.join(' · ') || 'Choices';
     case 'file':
@@ -116,7 +117,30 @@ export default function VisualFormBuilder({
   const [isSaving, setIsSaving] = useState(false);
   const [dynamicModalKey, setDynamicModalKey] = useState(0);
   const [rightPanelTab, setRightPanelTab] = useState('properties');
+  const [optionSets, setOptionSets] = useState([]);
+  const [optionLinks, setOptionLinks] = useState([]);
   const [libraryQuery, setLibraryQuery] = useState('');
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fieldOptionsService.listOptionSets()
+      .then((sets) => {
+        if (!cancelled) setOptionSets(sets);
+      })
+      .catch(() => {
+        if (!cancelled) setOptionSets([]);
+      });
+    dynamicMappingsService.listMappings()
+      .then((links) => {
+        if (!cancelled) setOptionLinks(links);
+      })
+      .catch(() => {
+        if (!cancelled) setOptionLinks([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [libraryCategory, setLibraryCategory] = useState('all');
   const [canvasMode, setCanvasMode] = useState('build');
   const [structureDragState, setStructureDragState] = useState(null);
@@ -222,26 +246,6 @@ return mappingData[parentValue] || [];`;
       };
     }
     
-    // If field has dynamic mapping but no dynamicConfig (incomplete setup), fix it
-    if (field.dynamicMapping && !field.dynamicConfig) {
-      console.warn(`Field ${field.name} has dynamicMapping but no dynamicConfig - incomplete setup`);
-      return {
-        ...field,
-        options: [], // Clear static options
-        dependsOn: null // Will be fixed when user re-enables dynamic
-      };
-    }
-    
-    // If field has dynamic mapping but no dynamicConfig (old structure), fix it
-    if (field.dynamicMapping && !field.dynamicConfig) {
-      return {
-        ...field,
-        options: [], // Clear hardcoded options
-        dependsOn: null // Will be fixed by user re-enabling dynamic
-      };
-    }
-    
-    // Static field - keep as is
     return field;
   }, []);
 
@@ -1029,6 +1033,57 @@ return mappingData[parentValue] || [];`;
     const preparedSchema = prepareSchemaForSave(newSchema);
     onSchemaChange?.({ formType, formTheme, sections: preparedSchema });
   }, [schema, onSchemaChange, formType, formTheme, prepareSchemaForSave]);
+
+  const applyOptionSet = useCallback(async (sectionIndex, fieldIndex, optionType) => {
+    if (!optionType) {
+      updateField(sectionIndex, fieldIndex, {
+        optionType: undefined,
+        connectedToBackend: false,
+        dynamicMapping: undefined,
+        dependsOn: undefined
+      });
+      return;
+    }
+
+    const options = await fieldOptionsService.getOptionType(optionType);
+    updateField(sectionIndex, fieldIndex, {
+      optionType,
+      connectedToBackend: true,
+      dynamicMapping: undefined,
+      dependsOn: undefined,
+      options: options.map((option) => ({ label: option.label, value: option.value }))
+    });
+  }, [updateField]);
+
+  const applyOptionFollow = useCallback((sectionIndex, fieldIndex, parentFieldName) => {
+    const field = schema[sectionIndex]?.fields?.[fieldIndex];
+    if (!parentFieldName) {
+      updateField(sectionIndex, fieldIndex, {
+        dynamicMapping: undefined,
+        dependsOn: undefined
+      });
+      return;
+    }
+
+    const parentField = schema
+      .flatMap((section) => section.fields || [])
+      .find((candidate) => candidate.name === parentFieldName);
+    const parentOptionType = parentField?.optionType
+      || optionLinks.find((link) => link.id === parentField?.dynamicMapping)?.childOptionType;
+    if (!parentOptionType) return;
+
+    const matches = optionLinks.filter((link) => link.parentOptionType === parentOptionType);
+    const mapping = matches.find((link) => link.childOptionType === field?.optionType) || matches[0];
+    if (!mapping) return;
+
+    updateField(sectionIndex, fieldIndex, {
+      dynamicMapping: mapping.id,
+      dependsOn: parentField.name,
+      optionType: mapping.childOptionType,
+      connectedToBackend: true,
+      options: []
+    });
+  }, [optionLinks, schema, updateField]);
 
   // Handle options change
   const handleOptionsChange = useCallback((newOptions) => {
@@ -2011,86 +2066,71 @@ return mappingData[parentValue] || [];`;
   };
 
   const renderFieldOptions = (field, sectionIndex, fieldIndex) => {
-    return (
-      <div className={`mt-2 p-2 ${themeConfigs[formTheme].colors.secondary} rounded ${themeConfigs[formTheme].colors.border}`}>
-        {/* Properties Button - Available for all field types */}
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-gray-600">Properties:</span>
-          <button
-            onClick={() => handleOpenFieldProperties(sectionIndex, fieldIndex)}
-            className={`text-xs px-2 py-1 ${themeConfigs[formTheme].colors.primary} rounded hover:opacity-80`}
-          >
-            Configure
-          </button>
-        </div>
+    const usesSharedOptions = ['select', 'multiselect', 'radio'].includes(field.type);
+    if (!usesSharedOptions) return null;
 
-        {/* Options Section - For fields that need options */}
-        {(field.type === 'select' || field.type === 'multiselect' || field.type === 'radio' || field.type === 'checkbox' || field.type === 'rating') && (
-          <>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-600">Options:</span>
-              <div className="flex items-center space-x-2">
-                {field.connectedToBackend ? (
-                  <span className="text-xs text-green-600 flex items-center">
-                    🔗 {field.optionType} ({field.options?.length || 0} options)
-                  </span>
-                ) : field.options?.length > 0 ? (
-                  <span className="text-xs text-blue-600">
-                    📝 Custom ({field.options.length} options)
-                  </span>
-                ) : (
-                  <span className="text-xs text-gray-500">No options</span>
-                )}
-                <button
-                  onClick={() => handleOpenOptionsEditor(sectionIndex, fieldIndex)}
-                  className={`text-xs px-2 py-1 ${themeConfigs[formTheme].colors.secondary} ${themeConfigs[formTheme].colors.text} rounded hover:opacity-80`}
-                >
-                  Manage
-                </button>
-              </div>
-            </div>
-            
-            {/* Dynamic Connection Status - Only for select/multiselect */}
-            {(field.type === 'select' || field.type === 'multiselect') && (
-              <div className="mt-2 pt-2 border-t border-gray-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-600">Backend:</span>
-                  <div className="flex items-center space-x-2">
-                    {field.optionType ? (
-                      <span className="text-xs text-green-600 flex items-center">
-                        ✅ {field.optionType}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-500">Not connected</span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-xs text-gray-600">Dynamic:</span>
-                  <div className="flex items-center space-x-2">
-                    {field.dynamicMapping ? (
-                      <span className="text-xs text-purple-600 flex items-center">
-                        🔄 {field.dynamicMapping}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-500">Static</span>
-                    )}
-                    <button
-                      onClick={() => handleOpenDynamicConnection(sectionIndex, fieldIndex)}
-                      disabled={!field.optionType}
-                      className={`text-xs px-2 py-1 rounded ${
-                        field.optionType 
-                          ? `${themeConfigs[formTheme].colors.secondary} ${themeConfigs[formTheme].colors.text} hover:opacity-80` 
-                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      }`}
-                    >
-                      {field.dynamicMapping ? 'Edit' : 'Enable'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
+    const activeLink = optionLinks.find((link) => link.id === field.dynamicMapping);
+    const selectedSet = optionSets.find((optionSet) => optionSet.optionType === (field.optionType || activeLink?.childOptionType));
+    const optionTypeFor = (candidate) => candidate.optionType
+      || optionLinks.find((link) => link.id === candidate.dynamicMapping)?.childOptionType;
+    const choiceFields = schema.flatMap((section) => section.fields || []).filter((candidate) => {
+      const parentOptionType = optionTypeFor(candidate);
+      return candidate.name !== field.name
+        && ['select', 'multiselect', 'radio'].includes(candidate.type)
+        && parentOptionType
+        && optionLinks.some((link) => link.parentOptionType === parentOptionType);
+    });
+    const parentField = schema
+      .flatMap((section) => section.fields || [])
+      .find((candidate) => candidate.name === field.dependsOn);
+
+    return (
+      <div className="rounded-lg border border-gray-200 p-3">
+        <label className="mb-1 block text-xs font-medium text-gray-700">Option set</label>
+        <select
+          value={field.optionType || activeLink?.childOptionType || ''}
+          onChange={(event) => applyOptionSet(sectionIndex, fieldIndex, event.target.value)}
+          className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+        >
+          <option value="">Custom options for this field</option>
+          {optionSets.map((optionSet) => (
+            <option key={optionSet.optionType} value={optionSet.optionType}>
+              {optionSet.displayName}
+            </option>
+          ))}
+        </select>
+        <p className="mt-2 text-xs text-gray-500">
+          {field.dynamicMapping && parentField
+            ? `Choices change based on ${parentField.label || parentField.name}.`
+            : field.optionType
+              ? `Using ${selectedSet?.displayName || field.optionType}. Edit that list on the Field Options screen.`
+              : 'These choices belong only to this field.'}
+        </p>
+        {(choiceFields.length > 0 || field.dynamicMapping) && (
+          <div className="mt-3">
+            <label className="mb-1 block text-xs font-medium text-gray-700">Choices follow</label>
+            <select
+              value={field.dynamicMapping ? (field.dependsOn || '') : ''}
+              onChange={(event) => applyOptionFollow(sectionIndex, fieldIndex, event.target.value)}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">Always show this list</option>
+              {choiceFields.map((candidate) => (
+                <option key={candidate.name} value={candidate.name}>
+                  {candidate.label || candidate.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {!field.optionType && !field.dynamicMapping && (
+          <button
+            type="button"
+            onClick={() => handleOpenOptionsEditor(sectionIndex, fieldIndex)}
+            className="mt-3 rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200"
+          >
+            Edit choices
+          </button>
         )}
       </div>
     );
@@ -2745,9 +2785,14 @@ return mappingData[parentValue] || [];`;
                                     {previewText}
                                   </div>
                                 )}
+                                {field.dynamicMapping && (
+                                  <p className="mt-1 text-xs text-blue-700">
+                                    Follows {schema.flatMap((item) => item.fields || []).find((candidate) => candidate.name === field.dependsOn)?.label || 'another field'}
+                                  </p>
+                                )}
                               </div>
                               <div className="flex shrink-0 items-center gap-1">
-                                {hasOptions && (
+                                {hasOptions && !field.optionType && !field.dynamicMapping && (
                                   <button
                                     type="button"
                                     onClick={(event) => {

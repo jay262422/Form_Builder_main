@@ -136,6 +136,40 @@ class FieldOptionsService {
    * Get available option types
    * @returns {Promise<Array>} List of available option types
    */
+  async listOptionSets() {
+    const url = SIMPLE_API_CONFIG.getEndpointURL('fieldOptions', 'getTypes');
+    const response = await authenticatedFetch(url);
+    const data = await this.parseResponse(response);
+    return (data.optionTypes || []).map((item) => ({
+      id: item._id,
+      optionType: item.optionType,
+      displayName: item.metadata?.displayName || item.optionType,
+      description: item.metadata?.description || ''
+    }));
+  }
+
+  async saveOptionSet(optionSet) {
+    const body = {
+      optionType: optionSet.optionType,
+      options: optionSet.options,
+      metadata: {
+        displayName: optionSet.displayName,
+        description: optionSet.description || '',
+        category: 'custom'
+      }
+    };
+    const url = optionSet.id
+      ? SIMPLE_API_CONFIG.getEndpointURL('fieldOptions', 'update', { id: optionSet.id })
+      : SIMPLE_API_CONFIG.getEndpointURL('fieldOptions', 'create');
+    const response = await authenticatedFetch(url, {
+      method: optionSet.id ? 'PUT' : 'POST',
+      body: JSON.stringify(body)
+    });
+    const result = await this.parseResponse(response);
+    this.clearCache();
+    return result;
+  }
+
   async getAvailableOptionTypes() {
     try {
       const url = SIMPLE_API_CONFIG.getEndpointURL('fieldOptions', 'getTypes');

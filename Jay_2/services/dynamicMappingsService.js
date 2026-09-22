@@ -291,30 +291,42 @@ class DynamicMappingsService {
    * @param {string} parentValue - The parent field value
    * @returns {Promise<Array>} Child options
    */
+  async listMappings() {
+    const url = SIMPLE_API_CONFIG.getEndpointURL('dynamicMappings', 'getSummary');
+    const response = await authenticatedFetch(url);
+    const data = await this.parseResponse(response);
+    return (data.mappings || []).map((mapping) => ({
+      id: mapping.id,
+      name: mapping.name,
+      parentOptionType: mapping.parentOptionType,
+      childOptionType: mapping.childOptionType
+    }));
+  }
+
   async getChildOptions(mappingId, parentValue) {
     try {
-      console.log(`🔍 getChildOptions: mappingId=${mappingId}, parentValue=${parentValue}`);
-      
-      const mapping = await this.getDynamicMapping(mappingId);
-      console.log(`🔍 getChildOptions: mapping=`, mapping);
-      
-      if (!mapping || !mapping.mapping) {
-        console.log(`🔍 getChildOptions: No mapping or mapping data found`);
-        return [];
-      }
-      
-      console.log(`🔍 getChildOptions: Available mapping keys:`, Object.keys(mapping.mapping));
-      const childOptionValues = mapping.mapping[parentValue] || [];
-      console.log(`🔍 getChildOptions: Found ${childOptionValues.length} child options for parentValue="${parentValue}":`, childOptionValues);
-      
-      // Convert values to option objects
-      const options = childOptionValues.map(value => ({
-        label: value.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-        value: value
-      }));
-      
-      console.log(`🔍 getChildOptions: Returning ${options.length} options:`, options);
-      return options;
+      const url = SIMPLE_API_CONFIG.getEndpointURL('dynamicMappings', 'getMappedOptionsByCustomId', {
+        mappingId,
+        parentValue
+      });
+      const response = await authenticatedFetch(url);
+      const data = await this.parseResponse(response);
+      const mappedOptions = data.mappedOptions || [];
+
+      return mappedOptions.map((option) => {
+        if (option && typeof option === 'object') {
+          return {
+            label: option.label || String(option.value || ''),
+            value: option.value
+          };
+        }
+
+        const value = String(option);
+        return {
+          label: value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
+          value
+        };
+      }).filter((option) => option.value);
     } catch (error) {
       console.error(`Error getting child options for mapping '${mappingId}':`, error);
       return [];

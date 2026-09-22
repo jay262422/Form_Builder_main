@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * Select - Dropdown select field
@@ -38,13 +39,35 @@ export default function Select({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [menuStyle, setMenuStyle] = useState(null);
   const dropdownRef = useRef(null);
+  const menuRef = useRef(null);
   const inputId = `select-${name}`;
+
+  const updateMenuPosition = () => {
+    const rect = dropdownRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUpward = spaceBelow < 260 && rect.top > spaceBelow;
+    setMenuStyle({
+      position: 'fixed',
+      left: rect.left,
+      width: rect.width,
+      maxHeight: 240,
+      zIndex: 80,
+      ...(openUpward
+        ? { bottom: window.innerHeight - rect.top + 4 }
+        : { top: rect.bottom + 4 })
+    });
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+      const insideField = dropdownRef.current?.contains(event.target);
+      const insideMenu = menuRef.current?.contains(event.target);
+      if (!insideField && !insideMenu) {
         setIsOpen(false);
         setSearchTerm('');
       }
@@ -53,6 +76,19 @@ export default function Select({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    updateMenuPosition();
+    const handleMove = () => updateMenuPosition();
+    window.addEventListener('resize', handleMove);
+    window.addEventListener('scroll', handleMove, true);
+    return () => {
+      window.removeEventListener('resize', handleMove);
+      window.removeEventListener('scroll', handleMove, true);
+    };
+  }, [isOpen]);
 
   // Filter options based on search term
   const filteredOptions = options.filter(option => 
@@ -124,7 +160,11 @@ export default function Select({
             ${error ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : ''}
             ${isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}
           `}
-          onClick={() => !disabled && setIsOpen(!isOpen)}
+          onClick={() => {
+            if (disabled) return;
+            if (!isOpen) updateMenuPosition();
+            setIsOpen(!isOpen);
+          }}
         >
           <div className="flex items-center justify-between">
             <span className={value ? 'text-gray-900' : 'text-gray-500'}>
@@ -141,8 +181,12 @@ export default function Select({
           </div>
         </div>
 
-        {isOpen && (
-          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+        {isOpen && menuStyle && typeof document !== 'undefined' && createPortal(
+          <div
+            ref={menuRef}
+            style={menuStyle}
+            className="overflow-auto rounded-md border border-gray-300 bg-white shadow-lg"
+          >
             {searchable && (
               <div className="p-2 border-b">
                 <input
@@ -183,7 +227,8 @@ export default function Select({
                 ))
               )}
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
 

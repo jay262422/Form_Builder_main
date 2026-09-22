@@ -118,9 +118,21 @@ export default function FormBuilder({
     console.log(`🔍 FormBuilder: Field "${fieldName}" changed to:`, value);
     
     setFormData(prevData => {
-      const newData = { ...prevData, [fieldName]: value };
-      console.log('🔍 FormBuilder: Updated form data:', newData);
-      return newData;
+      const nextData = { ...prevData, [fieldName]: value };
+      const clearChildren = (parentName) => {
+        (normalizedSchema || []).forEach((section) => {
+          (section.fields || []).forEach((field) => {
+            if (!field.dynamicMapping || field.dependsOn !== parentName) return;
+            const currentValue = nextData[field.name];
+            const isEmpty = currentValue == null || currentValue === '' || (Array.isArray(currentValue) && currentValue.length === 0);
+            if (isEmpty) return;
+            nextData[field.name] = Array.isArray(currentValue) ? [] : '';
+            clearChildren(field.name);
+          });
+        });
+      };
+      clearChildren(fieldName);
+      return nextData;
     });
     
     // Clear field-specific errors when user starts typing
@@ -135,7 +147,7 @@ export default function FormBuilder({
       ...prevTouched,
       [fieldName]: true
     }));
-  }, []);
+  }, [normalizedSchema]);
 
   // Handle field blur for validation
   const handleFieldBlur = useCallback((fieldName) => {

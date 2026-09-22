@@ -86,7 +86,7 @@ exports.getOptionsByType = async (req, res) => {
 // Get all option types (summary)
 exports.getOptionTypes = async (req, res) => {
   try {
-    const optionTypes = await FieldOption.find({}, 'optionType metadata.displayName').sort({ optionType: 1 });
+    const optionTypes = await FieldOption.find({}, 'optionType metadata').sort({ optionType: 1 });
     return successResponse(res, {
       optionTypes: optionTypes,
       total: optionTypes.length

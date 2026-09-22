@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import fieldOptionsService from '../services/fieldOptionsService';
-import FieldConnectionManager from './FieldConnectionManager';
 
 const QUICK_TEMPLATES = {
   'yes_no': [
@@ -49,7 +48,6 @@ export default function OptionsEditor({
   const [newOption, setNewOption] = useState({ label: '', value: '' });
   const [editingIndex, setEditingIndex] = useState(-1);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [showConnectionManager, setShowConnectionManager] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [showQuickTemplates, setShowQuickTemplates] = useState(false);
 
@@ -173,45 +171,11 @@ export default function OptionsEditor({
 
         {/* Content */}
         <div className="px-6 py-4">
-          {/* Connection Status */}
-          {field?.connectedToBackend && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <span className="text-green-600">🔗</span>
-                  <span className="text-sm text-green-800">
-                    Connected to backend: <strong>{field.optionType}</strong>
-                  </span>
-                </div>
-                <button
-                  onClick={() => setShowConnectionManager(true)}
-                  className="text-sm text-green-600 hover:text-green-800"
-                >
-                  Manage
-                </button>
-              </div>
+          {field?.optionType && (
+            <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+              This field uses the saved option set <strong>{field.optionType}</strong>. Change or edit that list from Field Options.
             </div>
           )}
-
-                     {/* Connect to Backend - Only show if NOT connected */}
-           {!field?.connectedToBackend && (
-             <div className="mb-6">
-               <div className="flex items-center justify-between mb-2">
-                 <label className="block text-sm font-medium text-gray-700">
-                   Backend Connection
-                 </label>
-                 <button
-                   onClick={() => setShowConnectionManager(true)}
-                   className="text-sm text-blue-600 hover:text-blue-800"
-                 >
-                   🔗 Connect to Backend
-                 </button>
-               </div>
-               <p className="text-xs text-gray-500">
-                 Connect to backend to use options from JSON file
-               </p>
-             </div>
-           )}
 
           {/* Add/Edit Form */}
           {showAddForm && (
@@ -268,8 +232,8 @@ export default function OptionsEditor({
               <h4 className="text-sm font-medium text-gray-900">
                 Options ({safeOptions.length})
                 {loadingOptions && <span className="text-blue-600 ml-2">(Loading...)</span>}
-                {field?.connectedToBackend && !loadingOptions && (
-                  <span className="text-green-600 ml-2">(From Backend)</span>
+                {field?.optionType && !loadingOptions && (
+                  <span className="ml-2 text-blue-700">From saved set</span>
                 )}
               </h4>
                              {!field?.connectedToBackend && (
@@ -292,11 +256,11 @@ export default function OptionsEditor({
 
             {loadingOptions ? (
               <div className="text-center py-4 text-blue-600">
-                Loading options from backend...
+                Loading choices...
               </div>
             ) : field?.connectedToBackend && safeOptions.length === 0 ? (
               <div className="text-center py-4 text-gray-500">
-                No options found in backend for "{field.optionType}"
+                This saved set has no choices yet. Add them on the Field Options screen.
               </div>
             ) : !field?.connectedToBackend && safeOptions.length === 0 ? (
               <div className="text-center py-4 text-gray-500">
@@ -367,18 +331,6 @@ export default function OptionsEditor({
           </div>
         </div>
       </div>
-
-             {/* Field Connection Manager */}
-       {showConnectionManager && (
-         <FieldConnectionManager
-           field={field}
-           onUpdate={(updatedField) => {
-             onFieldUpdate?.(updatedField);
-             setShowConnectionManager(false);
-           }}
-           onClose={() => setShowConnectionManager(false)}
-         />
-       )}
 
        {/* Quick Templates Modal */}
        {showQuickTemplates && (
