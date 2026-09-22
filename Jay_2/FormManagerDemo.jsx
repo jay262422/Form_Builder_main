@@ -409,6 +409,7 @@ export default function FormManagerDemo({ quickAction = null, onQuickActionHandl
                       }}
                       submittedData={submittedData}
                       schema={selectedForm.schema?.sections || selectedForm.schema || []}
+                      formName={selectedForm.name}
                     />
                     <button
                       onClick={() => setSubmittedData(null)}

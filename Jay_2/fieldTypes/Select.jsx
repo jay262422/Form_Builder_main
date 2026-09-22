@@ -19,6 +19,8 @@ export default function Select({
   className = '',
   searchable = false,
   multiple = false,
+  selectionType,
+  maxSelections,
   formTheme = 'modern',
   theme,
   // Extract these props to prevent them from being passed to DOM
@@ -37,6 +39,8 @@ export default function Select({
   getOptions,
   ...props
 }) {
+  const isMultiple = Boolean(multiple) || selectionType === 'multiple';
+  const selectionCap = Number(maxSelections) > 0 ? Number(maxSelections) : 0;
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [menuStyle, setMenuStyle] = useState(null);
@@ -99,9 +103,13 @@ export default function Select({
   );
 
   const handleSelect = (option) => {
-    if (multiple) {
-      const currentValues = Array.isArray(value) ? value : [];
-      const newValues = currentValues.includes(option.value)
+    if (isMultiple) {
+      const currentValues = Array.isArray(value) ? value : (value ? [value] : []);
+      const alreadySelected = currentValues.includes(option.value);
+      if (!alreadySelected && selectionCap && currentValues.length >= selectionCap) {
+        return;
+      }
+      const newValues = alreadySelected
         ? currentValues.filter(v => v !== option.value)
         : [...currentValues, option.value];
       onChange(newValues);
@@ -113,7 +121,7 @@ export default function Select({
   };
 
   const getDisplayValue = () => {
-    if (multiple) {
+    if (isMultiple) {
       if (!Array.isArray(value) || value.length === 0) return placeholder;
       const selectedLabels = value.map(v => 
         options.find(opt => opt.value === v)?.label || v
@@ -126,7 +134,7 @@ export default function Select({
   };
 
   const removeValue = (valueToRemove) => {
-    if (multiple && Array.isArray(value)) {
+    if (isMultiple && Array.isArray(value)) {
       onChange(value.filter(v => v !== valueToRemove));
     }
   };
@@ -209,12 +217,12 @@ export default function Select({
                     key={option.value || index}
                     className={`
                       px-3 py-2 cursor-pointer hover:bg-gray-100
-                      ${multiple && Array.isArray(value) && value.includes(option.value) ? 'bg-blue-50' : ''}
-                      ${!multiple && value === option.value ? 'bg-blue-50' : ''}
+                      ${isMultiple && Array.isArray(value) && value.includes(option.value) ? 'bg-blue-50' : ''}
+                      ${!isMultiple && value === option.value ? 'bg-blue-50' : ''}
                     `}
                     onClick={() => handleSelect(option)}
                   >
-                    {multiple && (
+                    {isMultiple && (
                       <input
                         type="checkbox"
                         checked={Array.isArray(value) && value.includes(option.value)}
@@ -233,7 +241,7 @@ export default function Select({
       </div>
 
       {/* Selected values for multiple select */}
-      {multiple && Array.isArray(value) && value.length > 0 && (
+      {isMultiple && Array.isArray(value) && value.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
           {value.map((val, index) => {
             const option = options.find(opt => opt.value === val);

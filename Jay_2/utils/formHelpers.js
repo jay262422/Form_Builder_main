@@ -50,8 +50,15 @@ export function getDefaultValue(field) {
     case 'multiselect':
     case 'checkbox-list':
       return field.defaultValue || [];
+    case 'select':
+      return field.selectionType === 'multiple' ? (field.defaultValue || []) : (field.defaultValue || '');
     case 'checkbox':
-      return field.defaultValue || false;
+    case 'toggle':
+      if (typeof field.defaultValue === 'boolean') return field.defaultValue;
+      return Boolean(field.checked);
+    case 'range':
+      if (field.value !== undefined && field.value !== '') return Number(field.value);
+      return 50;
     case 'number':
       return field.defaultValue || '';
     case 'file':

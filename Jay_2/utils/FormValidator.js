@@ -151,6 +151,39 @@ export default class FormValidator {
       if (customError) return customError;
     }
 
+    const typeError = this.validateByType(fieldName, value, fieldSchema, formData);
+    if (typeError) return typeError;
+
+    return null;
+  }
+
+  /**
+   * Applies checks that come from the field type and its builder settings.
+   */
+  validateByType(fieldName, value, fieldSchema, formData = {}) {
+    if (fieldSchema.type === 'password' && fieldSchema.confirmPassword) {
+      const confirm = formData[`${fieldName}__confirm`] ?? '';
+      if (String(value ?? '') !== String(confirm)) {
+        return 'Passwords do not match';
+      }
+    }
+
+    if (value === null || value === undefined || value === '') return null;
+
+    const formatKind = fieldSchema.type === 'text' ? fieldSchema.type : (fieldSchema.inputType || fieldSchema.type);
+    if ((fieldSchema.type === 'email' || formatKind === 'email') && fieldSchema.validateEmail !== false) {
+      return this.defaultRules.email(value);
+    }
+    if ((fieldSchema.type === 'url' || formatKind === 'url') && fieldSchema.validateUrl !== false) {
+      return this.defaultRules.url(value);
+    }
+
+    const selectionCap = Number(fieldSchema.maxSelections);
+    const isMulti = fieldSchema.type === 'multiselect' || fieldSchema.selectionType === 'multiple';
+    if (isMulti && selectionCap > 0 && Array.isArray(value) && value.length > selectionCap) {
+      return `Select at most ${selectionCap} options`;
+    }
+
     return null;
   }
 

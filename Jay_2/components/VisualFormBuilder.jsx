@@ -51,8 +51,20 @@ const canvasFieldPreview = (field) => {
       return `${field.min ?? 0} – ${field.max ?? 100}`;
     case 'color':
       return field.defaultValue || 'Pick a color';
-    case 'calculated':
-      return field.formula || 'Calculated value';
+    case 'calculated': {
+      const operationLabels = {
+        sum: 'Sum',
+        average: 'Average',
+        multiply: 'Product',
+        subtract: 'Difference'
+      };
+      const operationLabel = operationLabels[field.calculation?.operation];
+      const sourceCount = Array.isArray(field.dependsOn) ? field.dependsOn.length : 0;
+      if (operationLabel) {
+        return sourceCount ? `${operationLabel} of ${sourceCount} field${sourceCount === 1 ? '' : 's'}` : operationLabel;
+      }
+      return 'Calculated value';
+    }
     case 'repeater':
       return 'Repeating group';
     case 'address':
@@ -63,6 +75,26 @@ const canvasFieldPreview = (field) => {
     default:
       return field.placeholder || null;
   }
+};
+
+const CALCULATION_SOURCE_TYPES = new Set(['number', 'currency', 'percentage', 'range', 'rating', 'calculated']);
+
+const calculationValueRef = (fieldName) => {
+  const access = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(fieldName)
+    ? `formData.${fieldName}`
+    : `formData[${JSON.stringify(fieldName)}]`;
+  return `(Number(${access}) || 0)`;
+};
+
+const buildCalculationFormula = (operation, fieldNames) => {
+  if (!Array.isArray(fieldNames) || fieldNames.length === 0) return '';
+  const parts = fieldNames.map(calculationValueRef);
+  if (operation === 'multiply') return parts.join(' * ');
+  if (operation === 'average') return `(${parts.join(' + ')}) / ${parts.length}`;
+  if (operation === 'subtract') {
+    return parts.slice(1).reduce((total, part) => `${total} - ${part}`, parts[0]);
+  }
+  return parts.join(' + ');
 };
 
 const EMPTY_INITIAL_SCHEMA = [];
@@ -186,6 +218,10 @@ export default function VisualFormBuilder({
   // ✅ Helper functions moved to top to avoid circular dependency
   // Helper function to ensure correct field structure before saving
   const prepareFieldForSave = useCallback((field) => {
+    if (field?.type === 'text' && field.inputType) {
+      field = { ...field, inputType: undefined };
+    }
+
     // If field has getOptions function (like engineering form), preserve it
     if (field.getOptions) {
       let getOptionsString = field.getOptions;
@@ -1298,22 +1334,9 @@ return mappingData[parentValue] || [];`;
     switch (field.type) {
       case 'text':
         return (
-          <div className="col-span-2">
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Input Type
-            </label>
-            <select
-              value={field.inputType || 'text'}
-              onChange={(e) => updateField(sectionIndex, fieldIndex, { inputType: e.target.value })}
-              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="text">Text</option>
-              <option value="password">Password</option>
-              <option value="url">URL</option>
-              <option value="tel">Phone</option>
-              <option value="email">Email</option>
-            </select>
-          </div>
+          <p className="col-span-2 text-xs text-gray-500">
+            This field is plain text. Add Email, Password, Phone, or URL from the library when you need one of those.
+          </p>
         );
 
       case 'email':
@@ -1711,7 +1734,7 @@ return mappingData[parentValue] || [];`;
               </label>
               <input
                 type="number"
-                value={field.value || 50}
+                value={field.value ?? 50}
                 onChange={(e) => updateField(sectionIndex, fieldIndex, { value: parseInt(e.target.value) || 50 })}
                 className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               />
@@ -1796,37 +1819,119 @@ return mappingData[parentValue] || [];`;
           </div>
         );
 
-      case 'calculated':
+      case 'calculated': {
+        const sourceFields = schema.flatMap((section) => section.fields || []).filter((candidate) => (
+          candidate?.name &&
+          candidate.name !== field.name &&
+          CALCULATION_SOURCE_TYPES.has(candidate.type)
+        ));
+        const selectedSources = Array.isArray(field.dependsOn) ? field.dependsOn : [];
+        const operation = field.calculation?.operation || (field.formula ? 'custom' : 'sum');
+
+        const applyCalculation = (nextOperation, nextSources, customFormula) => {
+          const formula = nextOperation === 'custom'
+            ? (customFormula ?? field.formula ?? '')
+            : buildCalculationFormula(nextOperation, nextSources);
+          updateField(sectionIndex, fieldIndex, {
+            calculation: { operation: nextOperation, fields: nextSources },
+            dependsOn: nextSources,
+            formula
+          });
+        };
+
         return (
           <>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Formula
+                Calculation
               </label>
-              <textarea
-                value={field.formula || ''}
-                onChange={(e) => updateField(sectionIndex, fieldIndex, { formula: e.target.value })}
+              <select
+                value={operation}
+                onChange={(e) => applyCalculation(e.target.value, selectedSources)}
                 className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="e.g., (formData.field1 || 0) + (formData.field2 || 0)"
-                rows="2"
-              />
+              >
+                <option value="sum">Add the selected fields</option>
+                <option value="subtract">Subtract the later fields from the first</option>
+                <option value="multiply">Multiply the selected fields</option>
+                <option value="average">Average the selected fields</option>
+                <option value="custom">Custom formula</option>
+              </select>
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Dependencies (comma-separated field names)
+                Use these fields
               </label>
-              <input
-                type="text"
-                value={field.dependsOn ? field.dependsOn.join(', ') : ''}
-                onChange={(e) => updateField(sectionIndex, fieldIndex, { 
-                  dependsOn: e.target.value.split(',').map(f => f.trim()).filter(f => f) 
-                })}
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="field1, field2, field3"
-              />
+              {sourceFields.length === 0 ? (
+                <p className="text-xs text-gray-500">
+                  Add a number, currency, percentage, range, or rating field first.
+                </p>
+              ) : (
+                <div className="space-y-1 rounded border border-gray-200 p-2">
+                  {sourceFields.map((source) => (
+                    <label key={source.name} className="flex items-center gap-2 text-xs text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={selectedSources.includes(source.name)}
+                        onChange={() => {
+                          const nextSources = selectedSources.includes(source.name)
+                            ? selectedSources.filter((name) => name !== source.name)
+                            : [...selectedSources, source.name];
+                          applyCalculation(operation, nextSources);
+                        }}
+                      />
+                      <span>{source.label || source.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
+            {operation === 'custom' ? (
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Formula
+                </label>
+                <textarea
+                  value={field.formula || ''}
+                  onChange={(e) => applyCalculation('custom', selectedSources, e.target.value)}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="(Number(formData.price) || 0) * 1.1"
+                  rows="3"
+                />
+                {selectedSources.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {selectedSources.map((sourceName) => (
+                      <button
+                        key={sourceName}
+                        type="button"
+                        onClick={() => applyCalculation(
+                          'custom',
+                          selectedSources,
+                          `${field.formula || ''}${field.formula ? ' ' : ''}${calculationValueRef(sourceName)}`
+                        )}
+                        className="rounded border border-gray-300 px-2 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50"
+                      >
+                        Insert {sourceFields.find((source) => source.name === sourceName)?.label || sourceName}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="col-span-2 text-xs text-gray-500">
+                {selectedSources.length === 0
+                  ? 'Pick at least one field to calculate from.'
+                  : operation === 'subtract'
+                    ? 'Starts with the first checked field, then subtracts the others.'
+                    : operation === 'multiply'
+                      ? 'Multiplies the checked fields.'
+                      : operation === 'average'
+                        ? 'Averages the checked fields.'
+                        : 'Adds the checked fields.'}
+              </p>
+            )}
           </>
         );
+      }
 
       case 'currency':
         return (

@@ -44,6 +44,7 @@ export default function TextInput({
   const finalMaxLength = validationConfig.maxLength || maxLength;
   const finalPattern = validationConfig.pattern || pattern;
   const finalRequired = validationConfig.required !== undefined ? validationConfig.required : required;
+  const htmlType = inputType || type;
   const inputId = `input-${name}`;
   
   const themeConfig = theme || {
@@ -56,8 +57,8 @@ export default function TextInput({
 
   // Get appropriate icon based on field type or name
   const getFieldIcon = () => {
-    if (type === 'email') return '📧';
-    if (type === 'phone') return '📞';
+    if (htmlType === 'email') return '📧';
+    if (htmlType === 'tel' || type === 'phone') return '📞';
     // Remove icons for name fields to prevent overlapping with placeholder text
     // if (name?.includes('name')) return '👤';
     if (name?.includes('company')) return '🏢';
@@ -88,7 +89,7 @@ export default function TextInput({
         )}
         <input
           id={inputId}
-          type={type}
+          type={htmlType}
           name={name}
           value={value}
           onChange={(e) => onChange(e.target.value)}

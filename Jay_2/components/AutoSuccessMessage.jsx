@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import FileDisplay from './FileDisplay';
+import { isBuiltInThankYou, saveThankYouHandoff } from '../utils/thankYouHandoff';
 
 const flattenSchemaFields = (schema) => {
   if (!schema) return [];
@@ -155,19 +156,37 @@ const SubmissionSummary = ({ schema, submittedData }) => {
   );
 };
 
-const AutoSuccessMessage = ({ settings, onResubmit, submittedData, schema }) => {
+const AutoSuccessMessage = ({ settings, onResubmit, submittedData, schema, formName }) => {
   const postSubmission = settings?.postSubmission || {};
+  const redirectUrl = settings?.redirectUrl || '';
+  const usesBuiltInThankYou = isBuiltInThankYou(redirectUrl);
   
   // Handle auto-redirect
   useEffect(() => {
-    if (postSubmission.autoRedirect?.enabled && settings.redirectUrl) {
-      const timer = setTimeout(() => {
-        window.location.href = settings.redirectUrl;
-      }, postSubmission.autoRedirect.delay || 3000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [postSubmission.autoRedirect, settings.redirectUrl]);
+    if (!postSubmission.autoRedirect?.enabled || !redirectUrl) return undefined;
+
+    const timer = setTimeout(() => {
+      if (usesBuiltInThankYou) {
+        saveThankYouHandoff({
+          formName: formName || '',
+          successMessage: settings.successMessage,
+          successIcon: postSubmission.successIcon || 'OK',
+          showSubmittedData: Boolean(postSubmission.showSubmittedData),
+          submittedData: postSubmission.showSubmittedData ? submittedData : null,
+          schema,
+          returnUrl: `${window.location.pathname}${window.location.search}`,
+          allowResubmit: Boolean(postSubmission.allowResubmit && onResubmit),
+          resubmitText: postSubmission.resubmitText
+        });
+        window.location.href = '/thank-you';
+        return;
+      }
+
+      window.location.href = redirectUrl;
+    }, postSubmission.autoRedirect.delay || 3000);
+
+    return () => clearTimeout(timer);
+  }, [postSubmission.autoRedirect, postSubmission.showSubmittedData, postSubmission.successIcon, postSubmission.allowResubmit, postSubmission.resubmitText, redirectUrl, usesBuiltInThankYou, settings.successMessage, submittedData, schema, formName, onResubmit]);
 
   return (
     <div className="text-center py-12">
@@ -202,9 +221,9 @@ const AutoSuccessMessage = ({ settings, onResubmit, submittedData, schema }) => 
       )}
       
       {/* Auto-redirect notice */}
-      {postSubmission.autoRedirect?.enabled && settings.redirectUrl && (
+      {postSubmission.autoRedirect?.enabled && redirectUrl && (
         <p className="text-sm text-gray-500 mt-4">
-          Redirecting in {postSubmission.autoRedirect.delay / 1000} seconds...
+          {usesBuiltInThankYou ? 'Opening the thank-you page' : 'Redirecting'} in {(postSubmission.autoRedirect.delay || 3000) / 1000} seconds...
         </p>
       )}
     </div>

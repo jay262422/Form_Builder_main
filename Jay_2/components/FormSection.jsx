@@ -165,6 +165,7 @@ export default function FormSection({
             error={errors[field.name]}
             touched={touched[field.name]}
             onChange={(value) => onFieldChange(field.name, value)}
+            onFieldChange={onFieldChange}
             onBlur={() => onFieldBlur(field.name)}
             disabled={disabled || field.disabled}
             formData={formData}

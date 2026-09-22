@@ -144,6 +144,7 @@ export default function PublishedFormPage() {
                 settings={form.settings || {}}
                 submittedData={submittedData}
                 schema={schema}
+                formName={form.name}
                 onResubmit={form.settings?.postSubmission?.allowResubmit ? handleResubmit : undefined}
               />
             </div>

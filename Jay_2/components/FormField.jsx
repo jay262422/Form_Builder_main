@@ -18,6 +18,7 @@ export default function FormField({
   error,
   touched,
   onChange,
+  onFieldChange,
   onBlur,
   disabled = false,
   formData = {},
@@ -252,7 +253,10 @@ export default function FormField({
       disabled: disabled || loadingOptions,
       error: touched && error,
       formTheme: formTheme,
-      theme: theme
+      theme: theme,
+      ...(field.type === 'password' && field.confirmPassword
+        ? { onCompanionChange: (confirmValue) => onFieldChange?.(`${field.name}__confirm`, confirmValue) }
+        : {})
     };
   }
 

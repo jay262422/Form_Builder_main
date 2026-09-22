@@ -11,9 +11,6 @@ export default function RatingInput({
   disabled = false,
   error = null
 }) {
-  // Debug logging
-  console.log('RatingInput props:', { field, value, onChange, disabled, error });
-  
   // Add fallback for when field is undefined
   if (!field) {
     console.error('RatingInput: field prop is undefined or null');
@@ -26,7 +23,7 @@ export default function RatingInput({
 
   const [hoverRating, setHoverRating] = useState(0);
   const maxRating = field.maxRating || 5;
-  const showLabels = field.showLabels || false;
+  const showLabels = field.showLabels !== false;
   const labels = field.labels || [];
 
   const handleClick = (rating) => {

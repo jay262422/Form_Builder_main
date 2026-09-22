@@ -1,5 +1,6 @@
 import formSubmissionService from '../services/formSubmissionService';
 import { isStepByStepForm } from './formHelpers';
+import { isBuiltInThankYou } from './thankYouHandoff';
 
 /**
  * Auto-generates submission handler based on form settings
@@ -131,8 +132,9 @@ const handleEmailNotification = async (emailConfig, formData) => {
  */
 export const handleAutoRedirect = (settings) => {
   if (settings?.postSubmission?.autoRedirect?.enabled && settings.redirectUrl) {
+    const target = isBuiltInThankYou(settings.redirectUrl) ? '/thank-you' : settings.redirectUrl;
     setTimeout(() => {
-      window.location.href = settings.redirectUrl;
+      window.location.href = target;
     }, settings.postSubmission.autoRedirect.delay || 3000);
   }
 };

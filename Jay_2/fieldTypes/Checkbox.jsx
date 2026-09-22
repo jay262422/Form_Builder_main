@@ -30,6 +30,7 @@ export default function Checkbox({
   optionType,
   inputType,
   getOptions,
+  checked,
   ...props
 }) {
   const checkboxId = `checkbox-${name}`;

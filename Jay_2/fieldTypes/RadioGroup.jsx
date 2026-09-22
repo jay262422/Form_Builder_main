@@ -35,7 +35,13 @@ export default function RadioGroup({
         </label>
       )}
       
-      <div className={`space-y-2 ${layout === 'horizontal' ? 'flex flex-wrap gap-4' : ''}`}>
+      <div className={
+        layout === 'horizontal'
+          ? 'flex flex-wrap gap-4'
+          : layout === 'grid'
+            ? 'grid grid-cols-2 gap-2'
+            : 'space-y-2'
+      }>
         {options.map((option, index) => {
           const optionId = `${groupId}-${index}`;
           const isChecked = value === option.value;

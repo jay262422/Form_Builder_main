@@ -867,7 +867,7 @@ export default function SubmissionManager({
                   Previous
                 </button>
                 <span className="text-sm text-gray-600">
-                  Page {totalRecords === 0 ? 0 : currentPage} of {totalPages}
+                  Page {currentPage} of {totalPages}
                 </span>
                 <button
                   onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))}

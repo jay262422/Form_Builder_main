@@ -182,7 +182,10 @@ export default function FormBuilder({
 
     if (Object.keys(validationErrors).length === 0) {
       try {
-        await onSubmit?.(formData);
+        const submitData = Object.fromEntries(
+          Object.entries(formData).filter(([key]) => !key.endsWith('__confirm'))
+        );
+        await onSubmit?.(submitData);
       } catch (error) {
         // Error handling is done by the parent component
         throw error;
