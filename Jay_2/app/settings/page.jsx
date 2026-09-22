@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import authService from '../../services/authService';
 import workspaceService from '../../services/workspaceService';
 import auditLogService from '../../services/auditLogService';
+import { validatePassword } from '../../utils/passwordValidation';
 
 const MEMBER_ROLES = ['admin', 'editor', 'viewer'];
 const fieldClassName = 'mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 disabled:cursor-not-allowed disabled:bg-slate-100';
@@ -153,6 +154,12 @@ export default function SettingsPage() {
 
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       setError('New password and confirm password do not match.');
+      return;
+    }
+
+    const passwordError = validatePassword(passwordForm.newPassword);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
 

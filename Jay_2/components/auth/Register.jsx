@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import Link from 'next/link';
 import AuthShell from './AuthShell';
+import { validatePassword, PASSWORD_REQUIREMENTS_HINT } from '../../utils/passwordValidation';
 
 export default function Register() {
   const { register, error: authError, isAuthenticated } = useAuth();
@@ -43,8 +44,9 @@ export default function Register() {
       return;
     }
 
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
+    const passwordError = validatePassword(formData.password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
 
@@ -142,7 +144,7 @@ export default function Register() {
                 autoComplete="new-password"
                 required
                 className="block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
-                placeholder="At least 6 characters"
+                placeholder={PASSWORD_REQUIREMENTS_HINT}
                 value={formData.password}
                 onChange={handleChange}
               />

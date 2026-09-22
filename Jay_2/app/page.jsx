@@ -96,7 +96,7 @@ export default function FormBuilderPage() {
                 </div>
               </div>
 
-              <div className={`grid grid-cols-1 md:grid-cols-2 ${visibleTabs.length >= 4 ? "xl:grid-cols-4" : "xl:grid-cols-3"} gap-3`}>
+              <div className={`grid grid-cols-1 md:grid-cols-2 ${visibleTabs.length >= 3 ? "xl:grid-cols-3" : "xl:grid-cols-2"} gap-3`}>
                 {visibleTabs.map((tab) => (
                   <button
                     key={tab.id}

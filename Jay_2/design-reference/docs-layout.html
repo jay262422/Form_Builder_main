@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Docs / Word Layout — Design Reference</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#f3f4f6_100%)] text-slate-900">
+  <header class="border-b border-slate-200 bg-white/90 px-6 py-4 shadow-sm">
+    <div class="mx-auto max-w-[1700px]">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div class="text-xs font-semibold uppercase tracking-[0.28em] text-sky-700">Concept 2 — Design reference</div>
+          <h1 class="mt-2 font-serif text-3xl text-slate-950">Docs / Word Layout</h1>
+          <p class="mt-2 max-w-3xl text-sm text-slate-600">Ribbon toolbar, document outline, page-like canvas, and block/logic/submit side panel.</p>
+        </div>
+        <div class="flex gap-3 text-sm font-semibold">
+          <span class="rounded-2xl border border-slate-200 px-4 py-2 text-slate-700">Preview Draft</span>
+          <span class="rounded-2xl bg-slate-950 px-4 py-2 text-white">Publish Draft</span>
+        </div>
+      </div>
+      <div class="mt-5 rounded-[1.5rem] border border-slate-200 bg-slate-50 px-4 py-4">
+        <div class="grid gap-3 xl:grid-cols-3">
+          <div class="rounded-[1.25rem] border border-sky-300 bg-sky-50 px-4 py-4">
+            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Add Fields</div>
+            <div class="mt-3 flex flex-wrap gap-2 text-sm"><span class="rounded-xl border bg-white px-3 py-2">Text</span><span class="rounded-xl border bg-white px-3 py-2">Email</span><span class="rounded-xl border bg-white px-3 py-2">Select</span></div>
+          </div>
+          <div class="rounded-[1.25rem] border border-slate-200 bg-white px-4 py-4">
+            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Form Structure</div>
+            <div class="mt-3 flex flex-wrap gap-2 text-sm"><span class="rounded-xl border bg-slate-50 px-3 py-2">Section</span><span class="rounded-xl border bg-slate-50 px-3 py-2">Step</span><span class="rounded-xl border bg-slate-50 px-3 py-2">2 Columns</span></div>
+          </div>
+          <div class="rounded-[1.25rem] border border-slate-200 bg-white px-4 py-4">
+            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Logic &amp; Rules</div>
+            <div class="mt-3 flex flex-wrap gap-2 text-sm"><span class="rounded-xl border bg-slate-50 px-3 py-2">Conditions</span><span class="rounded-xl border bg-slate-50 px-3 py-2">Show / Hide</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="mx-auto grid max-w-[1700px] gap-4 px-6 py-6 lg:grid-cols-[280px_minmax(0,1fr)_340px]">
+    <aside class="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-lg">
+      <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Form Outline</div>
+      <div class="mt-4 space-y-2 text-sm">
+        <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">Welcome Block</div>
+        <div class="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 font-semibold text-sky-800">Applicant Information</div>
+        <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">Employment Details</div>
+        <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">Documents &amp; Signature</div>
+        <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">Success Settings</div>
+      </div>
+    </aside>
+
+    <main class="rounded-[1.75rem] border border-slate-200 bg-[#f7f4ee] p-6 shadow-lg">
+      <div class="mx-auto max-w-3xl rounded-[1.75rem] border border-slate-200 bg-white px-10 py-10 shadow-lg">
+        <div class="text-center">
+          <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Page Canvas</div>
+          <h2 class="mt-4 font-serif text-3xl">Applicant Information</h2>
+          <p class="mt-3 text-sm leading-7 text-slate-600">Page-like editing workflow instead of stacked draggable cards.</p>
+        </div>
+        <div class="mt-10 grid gap-4 md:grid-cols-2">
+          <div class="rounded-[1.25rem] border border-slate-200 bg-slate-50 px-4 py-4 text-left text-sm"><div class="font-semibold">Full Name</div><div class="mt-2 text-slate-500">Inline field row with labels and validation.</div></div>
+          <div class="rounded-[1.25rem] border border-slate-200 bg-slate-50 px-4 py-4 text-left text-sm"><div class="font-semibold">Email Address</div><div class="mt-2 text-slate-500">Inline field row with labels and validation.</div></div>
+          <div class="rounded-[1.25rem] border border-slate-200 bg-slate-50 px-4 py-4 text-left text-sm"><div class="font-semibold">Phone Number</div></div>
+          <div class="rounded-[1.25rem] border border-slate-200 bg-slate-50 px-4 py-4 text-left text-sm"><div class="font-semibold">Role Type</div></div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-lg">
+      <div class="flex gap-2 text-xs font-semibold">
+        <span class="rounded-2xl bg-slate-950 px-3 py-2 text-white">Block</span>
+        <span class="rounded-2xl border border-slate-200 px-3 py-2 text-slate-600">Logic</span>
+        <span class="rounded-2xl border border-slate-200 px-3 py-2 text-slate-600">Submit</span>
+      </div>
+      <div class="mt-4 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 text-sm">
+        <div class="font-semibold">Block Panel</div>
+        <div class="mt-3 space-y-3 text-slate-700">
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">Heading and helper copy</div>
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">Inline field arrangement</div>
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">Per-block spacing and padding</div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</body>
+</html>

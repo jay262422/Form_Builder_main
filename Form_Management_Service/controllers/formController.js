@@ -3,6 +3,7 @@ const Submission = require('../models/Submission');
 const { buildScopedFormQuery } = require('../utils/workspaceHelper');
 const { createFormVersion } = require('../utils/formVersionHelper');
 const { logAuditEvent } = require('../utils/auditLogger');
+const { parsePagination, buildPaginationMeta } = require('../utils/paginationHelper');
 const {
   successResponse,
   errorResponse,
@@ -23,32 +24,35 @@ const getChangedFields = (updates = {}) => (
 exports.getAllForms = async (req, res) => {
   try {
     const { type, isPublished, isTemplate } = req.query;
-    
+    const { page, limit, skip } = parsePagination(req.query);
+
     const query = buildScopedFormQuery(req, {});
     if (!req.userId) {
       query['status.isPublished'] = true;
     }
-    
+
     if (type) query.type = type;
-    if (isPublished !== undefined) query['status.isPublished'] = isPublished === 'true';
-    if (isTemplate !== undefined) query['status.isTemplate'] = isTemplate === 'true';
-    
-    // Get forms with schema for calculating counts
-    const formsWithSchema = await Form.find(query)
-      .select('id name description type status statistics createdAt updatedAt schema')
-      .sort({ createdAt: -1 })
-      .lean() // Convert to plain JavaScript objects
-      .exec();
-    
-    // Calculate sections and fields count for each form
-    const forms = formsWithSchema.map(form => {
+    if (isPublished !== undefined) query['status.isPublished'] = isPublished === 'true' || isPublished === true;
+    if (isTemplate !== undefined) query['status.isTemplate'] = isTemplate === 'true' || isTemplate === true;
+
+    const [formsWithSchema, total] = await Promise.all([
+      Form.find(query)
+        .select('id name description type status statistics createdAt updatedAt schema')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      Form.countDocuments(query)
+    ]);
+
+    const forms = formsWithSchema.map((form) => {
       const sections = form.schema?.sections || form.schema || [];
       const sectionsCount = Array.isArray(sections) ? sections.length : 0;
-      const fieldsCount = Array.isArray(sections) 
-        ? sections.reduce((total, section) => total + (section.fields?.length || 0), 0) 
+      const fieldsCount = Array.isArray(sections)
+        ? sections.reduce((total, section) => total + (section.fields?.length || 0), 0)
         : 0;
-      
-      // Return summary without schema but with calculated counts
+
       return {
         _id: form._id,
         id: form.id,
@@ -63,8 +67,11 @@ exports.getAllForms = async (req, res) => {
         fieldsCount
       };
     });
-    
-    return successResponse(res, { forms }, 'Forms retrieved successfully');
+
+    return successResponse(res, {
+      forms,
+      pagination: buildPaginationMeta({ page, limit, total })
+    }, 'Forms retrieved successfully');
   } catch (error) {
     return errorResponse(res, error.message || 'Failed to retrieve forms', 500);
   }

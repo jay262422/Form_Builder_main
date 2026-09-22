@@ -8,9 +8,11 @@ import ThemeEditor from './editors/ThemeEditor';
  */
 export default function FormManager({
   onEditForm,
+  onEditFormNext,
   onViewForm,
   onViewSubmissions,
   onCreateForm,
+  onCreateFormNext,
   onFormsChanged,
   className = ""
 }) {
@@ -43,40 +45,10 @@ export default function FormManager({
   const loadForms = async () => {
     setLoading(true);
     try {
-      console.log('🔍 FormManager: Loading forms...');
       const allForms = await fileFormManager.getAllFormsWithExamples();
-      console.log('🔍 FormManager: Loaded forms:', allForms);
-      
-      // Check for forms with conditional logic
-      allForms.forEach(form => {
-        if (form.schema?.sections) {
-          form.schema.sections.forEach((section, sectionIndex) => {
-            if (section.condition) {
-              console.log(`🔍 FormManager: Form "${form.name}" has section condition:`, {
-                sectionTitle: section.title,
-                condition: section.condition
-              });
-            }
-            
-            if (section.fields) {
-              section.fields.forEach((field, fieldIndex) => {
-                if (field.condition) {
-                  console.log(`🔍 FormManager: Form "${form.name}" has field condition:`, {
-                    sectionTitle: section.title,
-                    fieldName: field.name,
-                    condition: field.condition
-                  });
-                }
-              });
-            }
-          });
-        }
-      });
-      
       setForms(allForms);
     } catch (error) {
       console.error('Error loading forms:', error);
-      // Set empty array to prevent undefined errors
       setForms([]);
     } finally {
       setLoading(false);
@@ -441,7 +413,7 @@ export default function FormManager({
             <h2 className="text-2xl font-bold text-gray-900">Form Manager</h2>
             <p className="text-gray-600 mt-1">Manage your created forms and templates</p>
           </div>
-          <div className="flex space-x-3">
+          <div className="flex flex-wrap gap-3">
             {onCreateForm && (
               <button
                 onClick={onCreateForm}
@@ -449,6 +421,15 @@ export default function FormManager({
               >
                 <span>➕</span>
                 <span>Create New Form</span>
+              </button>
+            )}
+            {onCreateFormNext && (
+              <button
+                onClick={onCreateFormNext}
+                className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors flex items-center space-x-2"
+              >
+                <span>✨</span>
+                <span>Builder Lab</span>
               </button>
             )}
             <label className="cursor-pointer px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2">
@@ -663,6 +644,14 @@ export default function FormManager({
                         >
                           Preview
                         </button>
+                        {onEditFormNext && (
+                          <button
+                            onClick={() => onEditFormNext(form)}
+                            className="px-3 py-1 text-sm bg-slate-900 text-white rounded hover:bg-slate-800 transition-colors"
+                          >
+                            Builder Lab
+                          </button>
+                        )}
                         <button
                           onClick={() => onViewSubmissions?.(form)}
                           className="px-3 py-1 text-sm bg-slate-700 text-white rounded hover:bg-slate-800 transition-colors"

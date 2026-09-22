@@ -4,6 +4,7 @@
  */
 
 import SIMPLE_API_CONFIG from './simpleApiConfig';
+import { authenticatedFetch } from './apiClient';
 
 class FieldOptionsService {
   constructor() {
@@ -27,20 +28,9 @@ class FieldOptionsService {
     return payload?.data !== undefined ? payload.data : payload;
   }
 
-  getAuthHeaders() {
-    const headers = { 'Content-Type': 'application/json' };
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('authToken');
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-    }
-    return headers;
-  }
-
   async findOptionTypeRecord(optionType) {
     const url = SIMPLE_API_CONFIG.getEndpointURL('fieldOptions', 'getTypes');
-    const response = await fetch(url, { headers: this.getAuthHeaders() });
+    const response = await authenticatedFetch(url);
     const data = await this.parseResponse(response);
     return (data.optionTypes || []).find(item => item.optionType === optionType);
   }
@@ -61,7 +51,7 @@ class FieldOptionsService {
     }
 
     try {
-      const response = await fetch(this.baseUrl);
+      const response = await authenticatedFetch(this.baseUrl);
       const data = await this.parseResponse(response);
       
       // Cache the result
@@ -96,7 +86,7 @@ class FieldOptionsService {
 
     try {
       const url = SIMPLE_API_CONFIG.getEndpointURL('fieldOptions', 'getByType', { optionType });
-      const response = await fetch(url);
+      const response = await authenticatedFetch(url);
       const data = await this.parseResponse(response);
       const options = data.options || [];
       
@@ -149,7 +139,7 @@ class FieldOptionsService {
   async getAvailableOptionTypes() {
     try {
       const url = SIMPLE_API_CONFIG.getEndpointURL('fieldOptions', 'getTypes');
-      const response = await fetch(url);
+      const response = await authenticatedFetch(url);
       const data = await this.parseResponse(response);
       return data.optionTypes?.map(opt => opt.optionType) || [];
     } catch (error) {
@@ -171,9 +161,8 @@ class FieldOptionsService {
 
       if (createNewType) {
         const url = SIMPLE_API_CONFIG.getEndpointURL('fieldOptions', 'create');
-        response = await fetch(url, {
+        response = await authenticatedFetch(url, {
           method: 'POST',
-          headers: this.getAuthHeaders(),
           body: JSON.stringify({
             optionType,
             options: [newOption]
@@ -188,9 +177,8 @@ class FieldOptionsService {
         const url = SIMPLE_API_CONFIG.getEndpointURL('fieldOptions', 'addOption', {
           id: optionTypeRecord._id
         });
-        response = await fetch(url, {
+        response = await authenticatedFetch(url, {
           method: 'POST',
-          headers: this.getAuthHeaders(),
           body: JSON.stringify(newOption)
         });
       }
@@ -227,9 +215,8 @@ class FieldOptionsService {
         optionValue
       });
 
-      const response = await fetch(url, {
+      const response = await authenticatedFetch(url, {
         method: 'PUT',
-        headers: this.getAuthHeaders(),
         body: JSON.stringify(updatedOption)
       });
       
@@ -264,9 +251,8 @@ class FieldOptionsService {
         optionValue
       });
 
-      const response = await fetch(url, {
+      const response = await authenticatedFetch(url, {
         method: 'DELETE',
-        headers: this.getAuthHeaders(),
       });
       
       const result = await this.parseResponse(response);
@@ -295,9 +281,8 @@ class FieldOptionsService {
       const url = SIMPLE_API_CONFIG.getEndpointURL('fieldOptions', 'delete', {
         id: optionTypeRecord._id
       });
-      const response = await fetch(url, {
+      const response = await authenticatedFetch(url, {
         method: 'DELETE',
-        headers: this.getAuthHeaders(),
       });
       
       const result = await this.parseResponse(response);

@@ -4,6 +4,7 @@
  */
 
 import SIMPLE_API_CONFIG from './simpleApiConfig';
+import { authenticatedFetch } from './apiClient';
 
 class DynamicMappingsService {
   constructor() {
@@ -27,17 +28,6 @@ class DynamicMappingsService {
     return payload?.data !== undefined ? payload.data : payload;
   }
 
-  getAuthHeaders() {
-    const headers = { 'Content-Type': 'application/json' };
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('authToken');
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-    }
-    return headers;
-  }
-
   /**
    * Get all dynamic mappings
    * @returns {Promise<Object>} All dynamic mappings
@@ -55,7 +45,7 @@ class DynamicMappingsService {
 
     try {
       const url = SIMPLE_API_CONFIG.getEndpointURL('dynamicMappings', 'getAll');
-      const response = await fetch(url);
+      const response = await authenticatedFetch(url);
       const data = await this.parseResponse(response);
 
       let mappings = {};
@@ -99,7 +89,7 @@ class DynamicMappingsService {
 
     try {
       const url = SIMPLE_API_CONFIG.getEndpointURL('dynamicMappings', 'getById', { id: mappingId });
-      const response = await fetch(url);
+      const response = await authenticatedFetch(url);
       const data = await this.parseResponse(response);
       const mapping = data || null;
       
@@ -139,7 +129,7 @@ class DynamicMappingsService {
         mappingId,
         parentValue
       });
-      const response = await fetch(url);
+      const response = await authenticatedFetch(url);
       const data = await this.parseResponse(response);
       const options = data.mappedOptions || [];
       
@@ -340,9 +330,8 @@ class DynamicMappingsService {
   async addDynamicMapping(mappingId, mappingData) {
     try {
       const url = SIMPLE_API_CONFIG.getEndpointURL('dynamicMappings', 'create');
-      const response = await fetch(url, {
+      const response = await authenticatedFetch(url, {
         method: 'POST',
-        headers: this.getAuthHeaders(),
         body: JSON.stringify(mappingData)
       });
       const result = await this.parseResponse(response);
@@ -366,9 +355,8 @@ class DynamicMappingsService {
   async updateDynamicMapping(mappingId, mappingData) {
     try {
       const url = SIMPLE_API_CONFIG.getEndpointURL('dynamicMappings', 'update', { id: mappingId });
-      const response = await fetch(url, {
+      const response = await authenticatedFetch(url, {
         method: 'PUT',
-        headers: this.getAuthHeaders(),
         body: JSON.stringify(mappingData)
       });
       const result = await this.parseResponse(response);
@@ -391,9 +379,8 @@ class DynamicMappingsService {
   async deleteDynamicMapping(mappingId) {
     try {
       const url = SIMPLE_API_CONFIG.getEndpointURL('dynamicMappings', 'delete', { id: mappingId });
-      const response = await fetch(url, {
+      const response = await authenticatedFetch(url, {
         method: 'DELETE',
-        headers: this.getAuthHeaders()
       });
       const result = await this.parseResponse(response);
       

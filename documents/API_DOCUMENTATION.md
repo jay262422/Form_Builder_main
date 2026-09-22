@@ -1,5 +1,7 @@
 # Form Management Service API Documentation
 
+> **Legacy reference.** For accurate routes, auth, pagination, and env setup use [Form_Management_Service/README.md](../Form_Management_Service/README.md). Base URL is **http://localhost:3004** with JWT Bearer auth on protected routes.
+
 ## Overview
 
 This API provides endpoints for managing forms, field options, and dynamic mappings with the new optimized data structure.
@@ -10,7 +12,7 @@ http://localhost:3000/api
 ```
 
 ## Authentication
-Currently, no authentication is required. Add authentication middleware as needed for production.
+JWT Bearer tokens required on protected routes. See [AUTHENTICATION_SETUP.md](./AUTHENTICATION_SETUP.md) and [TEST_AUTH.md](./TEST_AUTH.md).
 
 ---
 

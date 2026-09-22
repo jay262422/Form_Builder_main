@@ -72,16 +72,6 @@
 - `DELETE /api/dynamic-mappings/:id` - Delete mapping ✅
 - `POST /api/dynamic-mappings/bulk` - Bulk create mappings ✅
 
-### Category Routes (`/api/category-management`)
-
-**Public Routes (Optional Auth):**
-- `GET /api/category-management/categories` - Get categories
-- `GET /api/category-management/label-mappings` - Get label mappings
-
-**Protected Routes (Require Auth):**
-- `POST /api/category-management/categories` - Save categories ✅
-- `POST /api/category-management/label-mappings` - Save label mappings ✅
-
 ---
 
 ## 🔒 Authentication Levels

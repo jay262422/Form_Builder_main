@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import authService from '../services/authService';
 
 const AuthContext = createContext(null);
@@ -10,26 +10,34 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Check if user is logged in on mount
+  const handleSessionExpired = useCallback(() => {
+    authService.clearSession();
+    setUser(null);
+    setError('Your session expired. Please log in again.');
+  }, []);
+
   useEffect(() => {
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    window.addEventListener('auth:session-expired', handleSessionExpired);
+    return () => window.removeEventListener('auth:session-expired', handleSessionExpired);
+  }, [handleSessionExpired]);
 
   const checkAuth = async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      // First check localStorage
+
       const storedUser = authService.getUser();
       if (storedUser && authService.isAuthenticated()) {
-        // Verify token is still valid by fetching current user
         try {
           const currentUser = await authService.getCurrentUser();
           setUser(currentUser);
-        } catch (err) {
-          // Token invalid, clear everything
-          authService.logout();
+          authService.scheduleProactiveRefresh();
+        } catch {
+          authService.clearSession();
           setUser(null);
         }
       } else {
@@ -48,12 +56,8 @@ export function AuthProvider({ children }) {
       setLoading(true);
       setError(null);
       const response = await authService.login(email, password);
-      // Response structure: { success: true, data: { user, token } }
-      if (response.data && response.data.user) {
+      if (response.data?.user) {
         setUser(response.data.user);
-      } else if (response.user) {
-        // Fallback for different response structure
-        setUser(response.user);
       }
       return response;
     } catch (err) {
@@ -70,16 +74,11 @@ export function AuthProvider({ children }) {
       setLoading(true);
       setError(null);
       const response = await authService.register(email, password, name);
-      // Response structure: { success: true, data: { user, token } }
-      if (response.data && response.data.user) {
+      if (response.data?.user) {
         setUser(response.data.user);
-      } else if (response.user) {
-        // Fallback for different response structure
-        setUser(response.user);
       }
       return response;
     } catch (err) {
-      // Extract error message from response if available
       const errorMessage = err.response?.data?.message || err.message || 'Registration failed';
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -88,8 +87,8 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = () => {
-    authService.logout();
+  const logout = async () => {
+    await authService.logout();
     setUser(null);
     setError(null);
   };

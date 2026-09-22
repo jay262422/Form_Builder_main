@@ -6,6 +6,8 @@
 
 import SIMPLE_API_CONFIG from './simpleApiConfig';
 import errorHandler from './errorHandler';
+import authService from './authService';
+import { authenticatedFetch } from './apiClient';
 
 class FileFormManager {
   constructor() {
@@ -13,18 +15,7 @@ class FileFormManager {
   }
 
   getAuthHeaders() {
-    const headers = {
-      'Content-Type': 'application/json'
-    };
-
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('authToken');
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-    }
-
-    return headers;
+    return authService.getAuthHeaders();
   }
 
   // Normalize a form into Phase-1 schema and provide safe defaults
@@ -148,29 +139,46 @@ class FileFormManager {
   }
 
   /**
-   * Get all saved forms from the all_forms folder (summary only - fast loading)
+   * Get all saved forms (fetches every page from the API)
    */
   async getAllForms() {
     return errorHandler.withErrorHandling(async () => {
-      const response = await fetch(this.baseUrl, {
-        headers: this.getAuthHeaders()
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to fetch forms: ${response.status} ${response.statusText}`);
-      }
-      const responseData = await response.json();
+      const collectedForms = [];
+      let page = 1;
+      let hasNextPage = true;
+      const limit = 100;
 
-      // Backend returns { success, data: { forms } }; unwrap for single source of truth
-      const payload = responseData.data !== undefined ? responseData.data : responseData;
-      let forms = [];
-      if (payload && payload.forms && Array.isArray(payload.forms)) {
-        forms = payload.forms;
-      } else if (Array.isArray(payload)) {
-        forms = payload;
+      while (hasNextPage) {
+        const url = `${this.baseUrl}?page=${page}&limit=${limit}`;
+        const response = await authenticatedFetch(url);
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch forms: ${response.status} ${response.statusText}`);
+        }
+
+        const responseData = await response.json();
+        const payload = responseData.data !== undefined ? responseData.data : responseData;
+        const pageForms = Array.isArray(payload?.forms)
+          ? payload.forms
+          : Array.isArray(payload)
+            ? payload
+            : [];
+
+        collectedForms.push(...pageForms);
+
+        const pagination = payload?.pagination;
+        if (pagination) {
+          hasNextPage = Boolean(pagination.hasNextPage);
+          page += 1;
+        } else {
+          hasNextPage = pageForms.length === limit;
+          page += 1;
+        }
       }
 
-      const normalizedForms = forms.map(f => this.normalizeForm(f));
-      return normalizedForms;
+      return collectedForms
+        .map((form) => this.normalizeForm(form))
+        .filter(Boolean);
     }, 'getAllForms').catch(error => {
       if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
         const savedForms = localStorage.getItem('dynamic_forms_backup');
@@ -195,7 +203,7 @@ class FileFormManager {
   async getFormByCustomId(customId) {
     return errorHandler.withErrorHandling(async () => {
       const fullFormUrl = SIMPLE_API_CONFIG.getEndpointURL('forms', 'getById', { id: customId });
-      const response = await fetch(fullFormUrl, {
+      const response = await authenticatedFetch(fullFormUrl, {
         headers: this.getAuthHeaders()
       });
       if (!response.ok) {
@@ -228,7 +236,7 @@ class FileFormManager {
       const normalized = this.normalizeForm(cleanFormData);
 
       const createUrl = SIMPLE_API_CONFIG.getEndpointURL('forms', 'create');
-      const response = await fetch(createUrl, {
+      const response = await authenticatedFetch(createUrl, {
         method: 'POST',
         headers: this.getAuthHeaders(),
         body: JSON.stringify(normalized),
@@ -268,7 +276,7 @@ class FileFormManager {
       };
 
       const updateUrl = SIMPLE_API_CONFIG.getEndpointURL('forms', 'update', { id: id });
-      const response = await fetch(updateUrl, {
+      const response = await authenticatedFetch(updateUrl, {
         method: 'PUT',
         headers: this.getAuthHeaders(),
         body: JSON.stringify(updateData),
@@ -323,7 +331,7 @@ class FileFormManager {
       
       // Use the API endpoint to delete the form
       const deleteUrl = SIMPLE_API_CONFIG.getEndpointURL('forms', 'delete', { id: id });
-      const response = await fetch(deleteUrl, {
+      const response = await authenticatedFetch(deleteUrl, {
         method: 'DELETE',
         headers: this.getAuthHeaders(),
         body: JSON.stringify({ id, name: formToDelete.name }),
@@ -346,7 +354,7 @@ class FileFormManager {
   async duplicateForm(id) {
     return errorHandler.withErrorHandling(async () => {
       const duplicateUrl = SIMPLE_API_CONFIG.getEndpointURL('forms', 'duplicate', { id: id });
-      const response = await fetch(duplicateUrl, {
+      const response = await authenticatedFetch(duplicateUrl, {
         method: 'POST',
         headers: this.getAuthHeaders(),
       });
@@ -414,7 +422,7 @@ class FileFormManager {
     console.log('Form data:', formData);
     
     // Example server-side API call:
-    // await fetch('/api/forms/save', {
+    // await authenticatedFetch('/api/forms/save', {
     //   method: 'POST',
     //   headers: { 'Content-Type': 'application/json' },
     //   body: JSON.stringify({ filePath, formData })
@@ -429,7 +437,7 @@ class FileFormManager {
     console.log(`Would delete file: ${filePath}`);
     
     // Example server-side API call:
-    // await fetch('/api/forms/delete', {
+    // await authenticatedFetch('/api/forms/delete', {
     //   method: 'DELETE',
     //   headers: { 'Content-Type': 'application/json' },
     //   body: JSON.stringify({ filePath })
@@ -488,7 +496,7 @@ class FileFormManager {
   async getFormVersions(id) {
     return errorHandler.withErrorHandling(async () => {
       const url = SIMPLE_API_CONFIG.getEndpointURL('forms', 'versions', { id });
-      const response = await fetch(url, {
+      const response = await authenticatedFetch(url, {
         headers: this.getAuthHeaders()
       });
 
@@ -508,7 +516,7 @@ class FileFormManager {
   async getFormVersion(id, versionNumber) {
     return errorHandler.withErrorHandling(async () => {
       const url = SIMPLE_API_CONFIG.getEndpointURL('forms', 'versionByNumber', { id, versionNumber });
-      const response = await fetch(url, {
+      const response = await authenticatedFetch(url, {
         headers: this.getAuthHeaders()
       });
 
@@ -528,7 +536,7 @@ class FileFormManager {
   async restoreFormVersion(id, versionNumber) {
     return errorHandler.withErrorHandling(async () => {
       const url = SIMPLE_API_CONFIG.getEndpointURL('forms', 'restoreVersion', { id, versionNumber });
-      const response = await fetch(url, {
+      const response = await authenticatedFetch(url, {
         method: 'POST',
         headers: this.getAuthHeaders()
       });

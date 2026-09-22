@@ -4,6 +4,8 @@
  */
 
 import SIMPLE_API_CONFIG from './simpleApiConfig';
+import authService from './authService';
+import { authenticatedFetch } from './apiClient';
 
 class FormSubmissionService {
   /**
@@ -151,14 +153,10 @@ class FormSubmissionService {
    */
   getUploadHeaders() {
     const headers = {};
-
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('authToken');
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
+    const token = authService.getToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
     }
-
     return headers;
   }
 
@@ -175,7 +173,7 @@ class FormSubmissionService {
     }
 
     const url = SIMPLE_API_CONFIG.getEndpointURL('uploads', 'uploadForForm', { formId });
-    const response = await fetch(url, {
+    const response = await authenticatedFetch(url, {
       method: 'POST',
       headers: this.getUploadHeaders(),
       body: formData
@@ -209,21 +207,6 @@ class FormSubmissionService {
 
   generateSubmissionId() {
     return `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  getAuthHeaders() {
-    const headers = {
-      'Content-Type': 'application/json'
-    };
-
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('authToken');
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-    }
-
-    return headers;
   }
 
   async parseResponse(response) {
@@ -268,9 +251,8 @@ class FormSubmissionService {
       const submissionData = await this.prepareSubmissionData(formData, formSchema, includeMetadata, metadataOverrides);
       const url = SIMPLE_API_CONFIG.getEndpointURL('submissions', 'create');
 
-      const response = await fetch(url, {
+      const response = await authenticatedFetch(url, {
         method: 'POST',
-        headers: this.getAuthHeaders(),
         body: JSON.stringify(submissionData)
       });
 
@@ -297,7 +279,7 @@ class FormSubmissionService {
   async getSubmissions(options = {}) {
     const queryParams = this.buildQueryString(options);
     const url = `${SIMPLE_API_CONFIG.getEndpointURL('submissions', 'getAll')}${queryParams ? `?${queryParams}` : ''}`;
-    const response = await fetch(url, { headers: this.getAuthHeaders() });
+    const response = await authenticatedFetch(url);
     return this.parseResponse(response);
   }
 
@@ -312,7 +294,7 @@ class FormSubmissionService {
     const queryParams = this.buildQueryString(options);
     const formUrl = SIMPLE_API_CONFIG.getEndpointURL('submissions', 'getByForm', { formId });
     const url = `${formUrl}${queryParams ? `?${queryParams}` : ''}`;
-    const response = await fetch(url, { headers: this.getAuthHeaders() });
+    const response = await authenticatedFetch(url);
     return this.parseResponse(response);
   }
 
@@ -351,7 +333,7 @@ class FormSubmissionService {
     }
 
     const url = SIMPLE_API_CONFIG.getEndpointURL('submissions', 'getStats', { formId });
-    const response = await fetch(url, { headers: this.getAuthHeaders() });
+    const response = await authenticatedFetch(url);
     return this.parseResponse(response);
   }
 
@@ -360,7 +342,7 @@ class FormSubmissionService {
    */
   async getSubmission(submissionId) {
     const url = SIMPLE_API_CONFIG.getEndpointURL('submissions', 'getById', { id: submissionId });
-    const response = await fetch(url, { headers: this.getAuthHeaders() });
+    const response = await authenticatedFetch(url);
     return this.parseResponse(response);
   }
 
@@ -369,9 +351,8 @@ class FormSubmissionService {
    */
   async deleteSubmission(submissionId) {
     const url = SIMPLE_API_CONFIG.getEndpointURL('submissions', 'delete', { id: submissionId });
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: this.getAuthHeaders()
+    const response = await authenticatedFetch(url, {
+      method: 'DELETE'
     });
     return this.parseResponse(response);
   }
@@ -569,7 +550,7 @@ class FormSubmissionService {
     );
     const url = `${exportUrl}${queryParams ? `?${queryParams}` : ''}`;
 
-    const response = await fetch(url, { headers: this.getAuthHeaders() });
+    const response = await authenticatedFetch(url);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }

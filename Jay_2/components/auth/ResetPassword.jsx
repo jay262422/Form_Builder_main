@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import authService from '../../services/authService';
 import Link from 'next/link';
 import AuthShell from './AuthShell';
+import { validatePassword, PASSWORD_REQUIREMENTS_HINT } from '../../utils/passwordValidation';
 
 export default function ResetPassword() {
   const searchParams = useSearchParams();
@@ -34,8 +35,9 @@ export default function ResetPassword() {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
 
@@ -124,7 +126,7 @@ export default function ResetPassword() {
                 type="password"
                 required
                 className="block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
-                placeholder="At least 6 characters"
+                placeholder={PASSWORD_REQUIREMENTS_HINT}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />

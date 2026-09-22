@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import FormManager from './components/FormManager';
 import VisualFormBuilder from './components/VisualFormBuilder';
+import VisualFormBuilderNext from './components/VisualFormBuilderNext';
 import FormBuilder from './FormBuilder';
 import FormWizard from './components/FormWizard';
 import SubmissionManager from './components/SubmissionManager';
@@ -46,7 +47,7 @@ const createEmptyFormDraft = () => ({
  * Shows form manager, visual builder, and form preview
  */
 export default function FormManagerDemo({ quickAction = null, onQuickActionHandled, onViewStateChange, onDataChanged }) {
-  const [activeView, setActiveView] = useState('manager'); // 'manager', 'builder', 'preview', 'submissions'
+  const [activeView, setActiveView] = useState('manager'); // 'manager', 'builder', 'builder-next', 'preview', 'submissions'
   const [selectedForm, setSelectedForm] = useState(null);
   const [submittedData, setSubmittedData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -126,6 +127,28 @@ export default function FormManagerDemo({ quickAction = null, onQuickActionHandl
       const formToEdit = { ...form, originalFormType: isStepByStepForm(form) ? 'wizard' : 'multi-section' };
       setSelectedForm(formToEdit);
       setActiveView('builder');
+      setBuilderHasUnsavedChanges(false);
+      setToast({ message: 'Using cached form data due to loading error', type: 'warning' });
+    }
+  };
+
+  const handleEditFormNext = async (form) => {
+    if (!form || !form.id) {
+      setToast({ message: 'Invalid form data', type: 'error' });
+      return;
+    }
+
+    try {
+      const fullForm = await fileFormManager.getFormByCustomId(form.id);
+      const formToEdit = { ...fullForm, originalFormType: isStepByStepForm(fullForm) ? 'wizard' : 'multi-section' };
+      setSelectedForm(formToEdit);
+      setActiveView('builder-next');
+      setBuilderHasUnsavedChanges(false);
+    } catch (error) {
+      console.error('Error loading full form data:', error);
+      const formToEdit = { ...form, originalFormType: isStepByStepForm(form) ? 'wizard' : 'multi-section' };
+      setSelectedForm(formToEdit);
+      setActiveView('builder-next');
       setBuilderHasUnsavedChanges(false);
       setToast({ message: 'Using cached form data due to loading error', type: 'warning' });
     }
@@ -232,7 +255,7 @@ export default function FormManagerDemo({ quickAction = null, onQuickActionHandl
   };
 
   const goBackToManager = () => {
-    if (activeView === 'builder' && !confirmDiscardBuilderChanges()) {
+    if ((activeView === 'builder' || activeView === 'builder-next') && !confirmDiscardBuilderChanges()) {
       return;
     }
     setSelectedForm(null);
@@ -242,13 +265,13 @@ export default function FormManagerDemo({ quickAction = null, onQuickActionHandl
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {selectedForm && activeView !== 'manager' && (
+      {selectedForm && activeView !== 'manager' && activeView !== 'builder' && activeView !== 'builder-next' && (
         <div className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">
-                  {activeView === 'builder' ? 'Editing Form' : activeView === 'submissions' ? 'Viewing Submissions' : 'Previewing Form'}
+                  {activeView === 'submissions' ? 'Viewing Submissions' : 'Previewing Form'}
                 </h2>
                 <p className="text-gray-600">{selectedForm.name}</p>
               </div>
@@ -272,10 +295,16 @@ export default function FormManagerDemo({ quickAction = null, onQuickActionHandl
               onEditForm={handleEditForm}
               onViewForm={handleViewForm}
               onViewSubmissions={handleViewSubmissions}
+              onEditFormNext={handleEditFormNext}
               onFormsChanged={onDataChanged}
               onCreateForm={() => {
                 setSelectedForm(createEmptyFormDraft());
                 setActiveView('builder');
+                setBuilderHasUnsavedChanges(false);
+              }}
+              onCreateFormNext={() => {
+                setSelectedForm(createEmptyFormDraft());
+                setActiveView('builder-next');
                 setBuilderHasUnsavedChanges(false);
               }}
             />
@@ -285,34 +314,7 @@ export default function FormManagerDemo({ quickAction = null, onQuickActionHandl
 
       {activeView === 'builder' && (
         <div className="flex-1 flex flex-col min-h-0">
-          <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col min-h-0">
-            {selectedForm && (
-              <div className="bg-white border-b border-gray-200 px-6 py-3">
-                <div className="max-w-7xl mx-auto flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900">
-                      {selectedForm.id ? 'Editing Form' : 'Creating New Form'}
-                    </h2>
-                    <p className="text-sm text-gray-600">
-                      {selectedForm.name} {selectedForm.isTemplate && '(Template)'}
-                      {isStepByStepForm(selectedForm) && (
-                        <span className="ml-2 text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
-                          Step-by-Step Form
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                  <div className="flex space-x-3">
-                    <button
-                      onClick={goBackToManager}
-                      className="px-4 py-2 text-sm bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+          <div className="w-full flex-1 flex flex-col min-h-0">
             <VisualFormBuilder
               initialSchema={selectedForm}
               onSchemaChange={(newSchema) => {
@@ -323,6 +325,26 @@ export default function FormManagerDemo({ quickAction = null, onQuickActionHandl
                 setSelectedForm({ ...selectedForm, schema });
               }}
               isStandalone={false}
+              onSave={handleBuilderSave}
+              onCancel={goBackToManager}
+              onDirtyChange={setBuilderHasUnsavedChanges}
+            />
+          </div>
+        </div>
+      )}
+
+      {activeView === 'builder-next' && (
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="w-full flex-1 flex flex-col min-h-0">
+            <VisualFormBuilderNext
+              initialSchema={selectedForm}
+              onSchemaChange={(newSchema) => {
+                if (!selectedForm) return;
+                const schema = newSchema && typeof newSchema === 'object' && newSchema.sections
+                  ? newSchema
+                  : { formType: 'multi-section', sections: newSchema || [] };
+                setSelectedForm({ ...selectedForm, schema });
+              }}
               onSave={handleBuilderSave}
               onCancel={goBackToManager}
               onDirtyChange={setBuilderHasUnsavedChanges}

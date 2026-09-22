@@ -19,11 +19,27 @@ A powerful, flexible, and reusable form builder system for React applications. C
 - ✅ **TypeScript ready** - Full TypeScript support
 - ✅ **Extensible** - Easy to add new field types and validation rules
 
+## Current Application (June 2026)
+
+The live app is orchestrated by `FormManagerDemo` and the home page (`app/page.jsx`):
+
+| Area | Component / route | Notes |
+|------|-------------------|-------|
+| Form list & settings | `FormManager.jsx` | Create, edit, duplicate, versions |
+| **Form Builder** (primary) | `VisualFormBuilder.jsx` | Default Create/Edit — Build \| Preview, Structure panel |
+| **Builder Lab** (temporary) | `VisualFormBuilderNext.jsx` | Alternate UI until platform themes merge |
+| List preview | `FormManagerDemo` → `preview` view | Full-page preview of **saved** form |
+| Submissions | `SubmissionManager.jsx` | List, export, basic analytics charts |
+| Field Options (dev) | `FieldOptionsTester.jsx` | Tests `/api/field-options` API |
+| Theme Editor (dev) | `ThemeEditorDemo.jsx` | Per-form look & layout |
+
+Static layout exploration HTML lives in `design-reference/` (removed from app routes).
+
 ## Quick Start
 
 ### 1. Using Visual Form Builder (Recommended)
 
-The Visual Form Builder provides a drag-and-drop interface for creating forms without writing code:
+The **Form Builder** (`VisualFormBuilder`) is the primary drag-and-drop editor in Form Manager. **Builder Lab** (`VisualFormBuilderNext`) is a temporary alternate UI.
 
 ```jsx
 import VisualFormBuilder from './components/VisualFormBuilder';
@@ -498,93 +514,31 @@ function FormManagementPage() {
 
 #### Form Persistence
 
-Forms are automatically saved to localStorage with the following structure:
+## Form Storage (API-first)
+
+Forms are persisted via **`fileFormManager.js`**, which talks to the backend API (`Form_Management_Service` on port 3004). localStorage is used only as a fallback when the API is unavailable.
 
 ```javascript
-{
-  id: "form_1234567890_abc123",
-  name: "My Form",
-  description: "Form description",
-  schema: [...], // The form schema
-  createdAt: "2024-01-01T00:00:00.000Z",
-  updatedAt: "2024-01-01T00:00:00.000Z",
-  isTemplate: false
-}
+import fileFormManager from './services/fileFormManager';
+
+// Load all forms
+const forms = await fileFormManager.getAllForms();
+
+// Get one form
+const form = await fileFormManager.getFormByCustomId('form_id');
+
+// Save / update
+await fileFormManager.saveForm(formData);
+await fileFormManager.updateForm(formId, updates);
+
+// Delete / duplicate
+await fileFormManager.deleteForm(formId);
+await fileFormManager.duplicateForm(formId);
 ```
 
-### Form Manager Service
+Set `NEXT_PUBLIC_API_URL=http://localhost:3004` if needed (default in `simpleApiConfig.js`).
 
-The `formManager` service provides programmatic access to form operations:
-
-```javascript
-import formManager from './services/formManager';
-
-// Save a new form
-const savedForm = formManager.saveForm({
-  name: 'My Form',
-  description: 'A test form',
-  schema: [...]
-});
-
-// Get all forms
-const allForms = formManager.getAllForms();
-
-// Get a specific form
-const form = formManager.getFormById('form_id');
-
-// Update a form
-formManager.updateForm('form_id', {
-  name: 'Updated Form Name',
-  schema: [...]
-});
-
-// Delete a form
-formManager.deleteForm('form_id');
-
-// Duplicate a form
-const duplicatedForm = formManager.duplicateForm('form_id');
-```
-
-### Form Templates
-
-The system includes pre-built templates for common forms:
-
-- **Contact Form**: Basic contact information
-- **Vendor Registration**: Complete vendor onboarding
-- **Engineering Project**: Engineering project requirements
-
-You can create forms from templates:
-
-```javascript
-// Create from template
-const newForm = formManager.createFromTemplate('contact_form');
-
-// Get all templates
-const templates = formManager.getTemplates();
-```
-
-### Future Database Integration
-
-The current system uses localStorage for persistence. When your backend is ready, you can easily replace the storage layer:
-
-```javascript
-// Example future database integration
-class DatabaseFormManager {
-  async saveForm(formData) {
-    const response = await fetch('/api/forms', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData)
-    });
-    return response.json();
-  }
-  
-  async getAllForms() {
-    const response = await fetch('/api/forms');
-    return response.json();
-  }
-}
-```
+See also: [Form_Management_Service/README.md](../Form_Management_Service/README.md)
 
 ## Customization
 
@@ -670,4 +624,4 @@ To add new features or fix bugs:
 
 ## License
 
-This form builder is part of your e-marketplace project and follows the same license terms. 
+MIT 

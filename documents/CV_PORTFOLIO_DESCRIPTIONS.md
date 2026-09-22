@@ -1,5 +1,7 @@
 # Dynamic Form Builder - CV & Portfolio Descriptions
 
+> For current architecture and backlog, see [PROJECT_ANALYSIS.md](../PROJECT_ANALYSIS.md).
+
 ## 📄 CV/Resume Descriptions (Multiple Lengths)
 
 ### 🎯 Short Version (1-2 lines) - For Skills Section or Brief List

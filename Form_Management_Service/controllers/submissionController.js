@@ -1,6 +1,11 @@
 const Submission = require('../models/Submission');
 const Form = require('../models/Form');
 const { buildScopedFormQuery } = require('../utils/workspaceHelper');
+const { parsePagination, buildPaginationMeta } = require('../utils/paginationHelper');
+const {
+  validateSubmissionAgainstForm,
+  canSubmitToForm
+} = require('../utils/submissionValidator');
 const {
   successResponse,
   errorResponse,
@@ -115,14 +120,8 @@ const normalizeForStorage = (value) => {
 // Get all submissions
 exports.getAllSubmissions = async (req, res) => {
   try {
-    const { 
-      formId, 
-      page = 1, 
-      limit = 10, 
-      dateFrom, 
-      dateTo 
-    } = req.query;
-    
+    const { page, limit, skip } = parsePagination(req.query);
+    const { formId, dateFrom, dateTo } = req.query;
     const query = {};
     const accessibleFormIds = await getAccessibleFormIds(req);
 
@@ -143,18 +142,16 @@ exports.getAllSubmissions = async (req, res) => {
     
     const submissions = await Submission.find(query)
       .sort({ submittedAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
+      .limit(limit)
+      .skip(skip)
       .lean()
       .exec();
-    
+
     const total = await Submission.countDocuments(query);
-    
+
     return successResponse(res, {
       submissions,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
-      total
+      pagination: buildPaginationMeta({ page, limit, total })
     }, 'Submissions retrieved successfully');
   } catch (error) {
     return errorResponse(res, error.message || 'Failed to retrieve submissions', 500);
@@ -188,38 +185,32 @@ exports.getSubmissionById = async (req, res) => {
 exports.createSubmission = async (req, res) => {
   try {
     const { submissionId, formId, formData, metadata } = req.body;
-    
-    if (!formId || !formData) {
-      return validationError(res, 'formId and formData are required');
-    }
-    
-    const normalizedFormData = normalizeForStorage(formData);
+
+    const normalizedFormData = normalizeForStorage(formData || {});
     const normalizedMetadata = normalizeForStorage(metadata || {});
 
-    // Generate submissionId if not provided
     const finalSubmissionId = submissionId || `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    // Check if submission already exists
+
     const existingSubmission = await Submission.findOne({ submissionId: finalSubmissionId });
     if (existingSubmission) {
       return conflictResponse(res, 'Submission ID already exists');
     }
 
-    // Ensure form exists by custom form ID.
     const form = await Form.findOne({ id: formId }).lean();
     if (!form) {
       return notFoundResponse(res, 'Form not found');
     }
 
     const ownsForm = hasOwnedFormAccess(form, req.userId, req.user?.workspaceId);
-    const canSubmitPublishedForm = form.status?.isPublished === true;
+    const submitCheck = canSubmitToForm(form, req.userId);
 
-    if (!ownsForm && !canSubmitPublishedForm) {
-      return unauthorizedResponse(res, 'You do not have access to this form');
+    if (!ownsForm && !submitCheck.allowed) {
+      return unauthorizedResponse(res, submitCheck.reason || 'You do not have access to this form');
     }
 
-    if (form.settings?.requireAuthentication && !req.userId) {
-      return unauthorizedResponse(res, 'Authentication is required to submit this form');
+    const fieldErrors = validateSubmissionAgainstForm(form, normalizedFormData);
+    if (fieldErrors.length > 0) {
+      return validationError(res, 'Submission validation failed', fieldErrors);
     }
 
     if (form.settings?.allowMultipleSubmissions === false) {
@@ -350,7 +341,8 @@ exports.deleteSubmission = async (req, res) => {
 exports.getSubmissionsByForm = async (req, res) => {
   try {
     const { formId } = req.params;
-    const { page = 1, limit = 10, dateFrom, dateTo } = req.query;
+    const { page, limit, skip } = parsePagination(req.query);
+    const { dateFrom, dateTo } = req.query;
     const { form, error } = await getOwnedFormByCustomId(formId, req.userId, req.user?.workspaceId);
 
     if (error?.type === 'not_found') {
@@ -370,18 +362,16 @@ exports.getSubmissionsByForm = async (req, res) => {
     
     const submissions = await Submission.find(query)
       .sort({ submittedAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
+      .limit(limit)
+      .skip(skip)
       .lean()
       .exec();
-    
+
     const total = await Submission.countDocuments(query);
-    
+
     return successResponse(res, {
       submissions,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
-      total
+      pagination: buildPaginationMeta({ page, limit, total })
     }, 'Submissions retrieved successfully');
   } catch (error) {
     return errorResponse(res, error.message || 'Failed to retrieve submissions', 500);

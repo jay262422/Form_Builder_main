@@ -1,103 +1,77 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { appConfig } = require('../config/appConfig');
+const {
+  unauthorizedResponse,
+  forbiddenResponse,
+  errorResponse
+} = require('../utils/responseHelper');
 const { hasWorkspaceRole } = require('../utils/workspaceHelper');
 
 const getJwtSecret = () => {
-  if (!process.env.JWT_SECRET) {
+  if (!appConfig.jwt.secret) {
     throw new Error('JWT_SECRET is not configured');
   }
-  return process.env.JWT_SECRET;
+  return appConfig.jwt.secret;
 };
 
-/**
- * Authentication Middleware
- * Verifies JWT token and attaches user to request
- */
 const authenticate = async (req, res, next) => {
   try {
-    // Get token from header
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ 
-        error: 'Unauthorized',
-        message: 'No token provided' 
-      });
+      return unauthorizedResponse(res, 'No token provided');
     }
 
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-
+    const token = authHeader.substring(7);
     if (!token) {
-      return res.status(401).json({ 
-        error: 'Unauthorized',
-        message: 'No token provided' 
-      });
+      return unauthorizedResponse(res, 'No token provided');
     }
 
     try {
-      // Verify token
       const decoded = jwt.verify(token, getJwtSecret());
-      
-      // Get user from database
       const user = await User.findById(decoded.userId).select('-password');
-      
+
       if (!user) {
-        return res.status(401).json({ 
-          error: 'Unauthorized',
-          message: 'User not found' 
-        });
+        return unauthorizedResponse(res, 'User not found');
       }
 
       if (!user.isActive) {
-        return res.status(401).json({ 
-          error: 'Unauthorized',
-          message: 'User account is inactive' 
-        });
+        return unauthorizedResponse(res, 'User account is inactive');
       }
 
-      // Attach user to request
+      if (appConfig.requireEmailVerified && !user.isEmailVerified) {
+        return forbiddenResponse(res, 'Email verification is required');
+      }
+
       req.user = user;
       req.userId = user._id;
-      
-      next();
+      return next();
     } catch (error) {
       if (error.name === 'JsonWebTokenError') {
-        return res.status(401).json({ 
-          error: 'Unauthorized',
-          message: 'Invalid token' 
-        });
+        return unauthorizedResponse(res, 'Invalid token');
       }
       if (error.name === 'TokenExpiredError') {
-        return res.status(401).json({ 
-          error: 'Unauthorized',
-          message: 'Token expired' 
-        });
+        return unauthorizedResponse(res, 'Token expired');
       }
       throw error;
     }
   } catch (error) {
-    res.status(500).json({ 
-      error: 'Authentication error',
-      message: error.message 
-    });
+    return errorResponse(res, error.message || 'Authentication error', 500);
   }
 };
 
-/**
- * Optional Authentication Middleware
- * Attaches user if token exists, but doesn't require it
- */
 const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
-      
+
       try {
         const decoded = jwt.verify(token, getJwtSecret());
         const user = await User.findById(decoded.userId).select('-password');
-        
+
         if (user && user.isActive) {
           req.user = user;
           req.userId = user._id;
@@ -106,58 +80,35 @@ const optionalAuth = async (req, res, next) => {
         // Ignore token errors for optional auth
       }
     }
-    
-    next();
+
+    return next();
   } catch (error) {
-    next();
+    return next();
   }
 };
 
-/**
- * Authorization Middleware
- * Checks if user has required role
- */
-const authorize = (...roles) => {
-  return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ 
-        error: 'Unauthorized',
-        message: 'Authentication required' 
-      });
-    }
+const authorize = (...roles) => (req, res, next) => {
+  if (!req.user) {
+    return unauthorizedResponse(res, 'Authentication required');
+  }
 
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ 
-        error: 'Forbidden',
-        message: 'Insufficient permissions' 
-      });
-    }
+  if (!roles.includes(req.user.role)) {
+    return forbiddenResponse(res, 'Insufficient permissions');
+  }
 
-    next();
-  };
+  return next();
 };
 
-/**
- * Workspace role authorization middleware
- */
-const authorizeWorkspace = (...workspaceRoles) => {
-  return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Authentication required'
-      });
-    }
+const authorizeWorkspace = (...workspaceRoles) => (req, res, next) => {
+  if (!req.user) {
+    return unauthorizedResponse(res, 'Authentication required');
+  }
 
-    if (!hasWorkspaceRole(req.user, workspaceRoles)) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Insufficient workspace permissions'
-      });
-    }
+  if (!hasWorkspaceRole(req.user, workspaceRoles)) {
+    return forbiddenResponse(res, 'Insufficient workspace permissions');
+  }
 
-    next();
-  };
+  return next();
 };
 
 module.exports = {

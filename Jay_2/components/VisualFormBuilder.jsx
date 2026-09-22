@@ -6,7 +6,20 @@ import FieldPropertiesEditor from './FieldPropertiesEditor';
 import RepeaterTemplateEditor from './RepeaterTemplateEditor';
 import fileFormManager from '../services/fileFormManager';
 import FormSection from './FormSection';
+import FormBuilder from '../FormBuilder';
+import FormWizard from './FormWizard';
 import { builderThemeConfigs } from '../utils/themeConfigs';
+
+const moveArrayItem = (items, fromIndex, toIndex) => {
+  if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) {
+    return items;
+  }
+
+  const nextItems = [...items];
+  const [movedItem] = nextItems.splice(fromIndex, 1);
+  nextItems.splice(toIndex, 0, movedItem);
+  return nextItems;
+};
 
 /**
  * VisualFormBuilder - Drag-and-drop form builder for non-technical users
@@ -46,6 +59,8 @@ export default function VisualFormBuilder({
   const [isSaving, setIsSaving] = useState(false);
   const [dynamicModalKey, setDynamicModalKey] = useState(0);
   const [rightPanelTab, setRightPanelTab] = useState('properties');
+  const [canvasMode, setCanvasMode] = useState('build');
+  const [structureDragState, setStructureDragState] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastDraftSavedAt, setLastDraftSavedAt] = useState(null);
   const autosaveTimeoutRef = React.useRef(null);
@@ -77,6 +92,7 @@ export default function VisualFormBuilder({
   
   // Use shared theme configurations
   const themeConfigs = builderThemeConfigs;
+  const theme = (themeConfigs[formTheme] || themeConfigs.modern).colors;
 
   const formDraftStorageKey = useMemo(() => {
     const formId = initialSchema?.id || initialSchema?._id || 'new';
@@ -783,9 +799,15 @@ return mappingData[parentValue] || [];`;
     setHasUnsavedChanges(true);
   };
 
+  const handleFormNameChange = (event) => {
+    setFormName(event.target.value);
+    markDirty();
+  };
 
-
-
+  const handleFormDescriptionChange = (event) => {
+    setFormDescription(event.target.value);
+    markDirty();
+  };
   // Handle adding a new section
   const addSection = useCallback(() => {
     const newSection = {
@@ -851,6 +873,41 @@ return mappingData[parentValue] || [];`;
     });
     
     // ✅ Notify parent with prepared schema
+    const preparedSchema = prepareSchemaForSave(newSchema);
+    onSchemaChange?.({ formType, formTheme, sections: preparedSchema });
+  }, [schema, onSchemaChange, prepareSchemaForSave, formType, formTheme]);
+
+  const moveField = useCallback((sectionIndex, fromIndex, toIndex) => {
+    const fields = schema[sectionIndex]?.fields || [];
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= fields.length || toIndex >= fields.length) {
+      return;
+    }
+
+    const newSchema = [...schema];
+    newSchema[sectionIndex] = {
+      ...newSchema[sectionIndex],
+      fields: moveArrayItem(fields, fromIndex, toIndex)
+    };
+    setSchema(newSchema);
+    markDirty();
+    setSelectedField((current) => {
+      if (!current) return null;
+      const [currentSection, currentField] = String(current).split('-').map((value) => parseInt(value, 10));
+      if (currentSection !== sectionIndex || Number.isNaN(currentField)) {
+        return current;
+      }
+      if (currentField === fromIndex) {
+        return `${sectionIndex}-${toIndex}`;
+      }
+      if (fromIndex < currentField && currentField <= toIndex) {
+        return `${sectionIndex}-${currentField - 1}`;
+      }
+      if (toIndex <= currentField && currentField < fromIndex) {
+        return `${sectionIndex}-${currentField + 1}`;
+      }
+      return current;
+    });
+
     const preparedSchema = prepareSchemaForSave(newSchema);
     onSchemaChange?.({ formType, formTheme, sections: preparedSchema });
   }, [schema, onSchemaChange, prepareSchemaForSave, formType, formTheme]);
@@ -2053,10 +2110,135 @@ return mappingData[parentValue] || [];`;
     );
   };
 
+  const previewForm = useMemo(() => ({
+    name: formName.trim() || 'Untitled Form',
+    description: formDescription.trim(),
+    schema: {
+      formType,
+      formTheme,
+      sections: schema
+    },
+    settings: {
+      buttons: {
+        submit: { text: 'Submit', show: true },
+        reset: { text: 'Reset', show: true },
+        cancel: { text: 'Cancel', show: false }
+      }
+    }
+  }), [formDescription, formName, formTheme, formType, schema]);
+
+  const previewEmptyState = schema.length === 0 || !schema.some((section) => (section.fields || []).length > 0);
 
   return (
-    <div className={`visual-form-builder ${className}`}>
-      <div className="flex h-screen bg-gray-50">
+    <div className={`visual-form-builder flex h-full min-h-0 flex-col bg-gray-50 ${className}`}>
+      <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col px-4 py-4 lg:px-6">
+      <div className="shrink-0 border-b border-gray-200 bg-gray-50 pb-4">
+        <div className="w-full">
+          <div className="w-full rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-600">Form Builder</div>
+
+            <div className="mt-3 mb-3 flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={formName}
+                onChange={handleFormNameChange}
+                className="min-w-[160px] flex-1 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-lg font-semibold text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500 sm:max-w-xs"
+                placeholder="Form name"
+              />
+              <input
+                type="text"
+                value={formDescription}
+                onChange={handleFormDescriptionChange}
+                className="min-w-[160px] flex-1 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500 sm:max-w-md"
+                placeholder="Short description for this form"
+              />
+              <div
+                className="inline-flex rounded-lg border border-blue-200 bg-white p-1 shadow-sm"
+                role="group"
+                aria-label="Form display type"
+              >
+                <button
+                  type="button"
+                  onClick={() => handleFormTypeChange('multi-section')}
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    formType === 'multi-section'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  Single Page
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleFormTypeChange('wizard')}
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    formType === 'wizard'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  Step-by-Step
+                </button>
+              </div>
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+              {onCancel && (
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              )}
+              {(isStandalone || onSave) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isStandalone && onSave) {
+                      if (formName.trim()) {
+                        handleSaveForm();
+                      } else {
+                        setShowSaveForm(true);
+                      }
+                    } else {
+                      setShowSaveForm(true);
+                    }
+                  }}
+                  disabled={isSaving}
+                  data-save-form
+                  className={`rounded-lg px-4 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${theme.primary}`}
+                >
+                  {isSaving ? 'Saving...' : (formName.trim() && !isStandalone ? 'Save changes' : 'Save form')}
+                </button>
+              )}
+              </div>
+            </div>
+
+            <p className="mb-3 text-sm text-blue-700">
+              {formType === 'multi-section' ? (
+                <span><strong>Single Page:</strong> All sections visible at once</span>
+              ) : (
+                <span><strong>Step-by-Step:</strong> One section at a time</span>
+              )}
+            </p>
+
+            <div className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
+              hasUnsavedChanges
+                ? 'bg-amber-100 text-amber-800'
+                : 'bg-emerald-100 text-emerald-800'
+            }`}>
+              {hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved'}
+              {lastDraftSavedAt && (
+                <span className="ml-2 opacity-80">
+                  · Draft {new Date(lastDraftSavedAt).toLocaleTimeString()}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-1">
         {/* Sidebar - Field Types */}
         <div className="w-64 bg-white border-r border-gray-200 p-4 overflow-y-auto">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Field Types</h3>
@@ -2148,123 +2330,154 @@ return mappingData[parentValue] || [];`;
             </div>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-gray-200">
-                          <button
-                onClick={addSection}
-                className={`w-full px-4 py-2 ${themeConfigs[formTheme].primary} rounded-lg transition-colors`}
-              >
-                + Add Section
-              </button>
-          </div>
         </div>
 
         {/* Main Canvas */}
-        <div className="flex-1 p-6 overflow-y-auto">
-          <div className="max-w-4xl mx-auto">
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Form Builder</h2>
-              <p className="text-gray-600">Drag field types from the sidebar to build your form</p>
-              
-              {/* Form Type Selector - Enhanced for editing */}
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <span className="text-sm font-semibold text-blue-700">Form Display Type:</span>
-                    {formName.trim() && (
-                      <span className="ml-2 text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
-                        Editing: {formName}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => handleFormTypeChange('multi-section')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        formType === 'multi-section'
-                          ? 'bg-blue-600 text-white shadow-md'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                      }`}
-                    >
-                      📄 Single Page
-                    </button>
-                    <button
-                      onClick={() => handleFormTypeChange('wizard')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        formType === 'wizard'
-                          ? 'bg-blue-600 text-white shadow-md'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                      }`}
-                    >
-                      🚀 Step-by-Step
-                    </button>
-                  </div>
+        <div className="flex-1 min-h-0 overflow-hidden bg-gray-50 p-4">
+          <main className="flex h-full min-h-0 flex-col rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Canvas Workspace</h3>
+                <p className="text-sm text-gray-500">
+                  {canvasMode === 'build'
+                    ? 'Structure sections first, then add fields from the library.'
+                    : 'Live preview — this is how respondents will see the form.'}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div
+                  className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5"
+                  role="group"
+                  aria-label="Canvas mode"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setCanvasMode('build')}
+                    className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                      canvasMode === 'build'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-gray-600 hover:bg-white'
+                    }`}
+                  >
+                    Build
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCanvasMode('preview')}
+                    className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                      canvasMode === 'preview'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-gray-600 hover:bg-white'
+                    }`}
+                  >
+                    Preview
+                  </button>
                 </div>
-                <div className="text-sm text-blue-600">
-                  {formType === 'multi-section' ? (
-                    <span>✅ <strong>Single Page:</strong> All sections visible at once - perfect for shorter forms</span>
-                  ) : (
-                    <span>✅ <strong>Step-by-Step:</strong> One section at a time - perfect for longer forms like registrations</span>
-                  )}
-                </div>
-                {formName.trim() && (
-                  <div className="mt-2 text-xs text-blue-500">
-                    You can change the display type anytime and the form will adapt.
-                  </div>
+                {canvasMode === 'build' && (
+                  <button
+                    type="button"
+                    onClick={addSection}
+                    className={`rounded-lg px-4 py-2 text-sm font-semibold text-white transition ${theme.primary}`}
+                  >
+                    Add Section
+                  </button>
                 )}
               </div>
-              <div className={`mt-3 rounded-md border px-3 py-2 text-xs ${
-                hasUnsavedChanges
-                  ? 'border-amber-200 bg-amber-50 text-amber-700'
-                  : 'border-emerald-200 bg-emerald-50 text-emerald-700'
-              }`}>
-                {hasUnsavedChanges ? 'Unsaved changes in progress.' : 'All changes saved.'}
-                {lastDraftSavedAt && (
-                  <span className="ml-2 opacity-80">
-                    Draft autosaved at {new Date(lastDraftSavedAt).toLocaleTimeString()}.
-                  </span>
-                )}
-              </div>
-
-              
-
-
             </div>
 
-            {schema.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-6xl mb-4">📝</div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">No sections yet</h3>
-                <p className="text-gray-600 mb-4">Click "Add Section" to get started</p>
-                <button
-                  onClick={addSection}
-                  className={`px-6 py-3 ${themeConfigs[formTheme].primary} rounded-lg transition-colors`}
-                >
-                  Add Your First Section
-                </button>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+            {canvasMode === 'preview' ? (
+              previewEmptyState ? (
+                <div className="flex min-h-[420px] items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 text-center px-6">
+                  <div>
+                    <div className="text-sm font-semibold uppercase tracking-[0.24em] text-gray-400">Preview waiting</div>
+                    <h4 className="mt-3 text-2xl font-semibold text-gray-900">Add fields to preview the form</h4>
+                    <p className="mt-2 text-sm text-gray-500">Switch to Build, add sections and fields, then return here to see the live form.</p>
+                    <button
+                      type="button"
+                      onClick={() => setCanvasMode('build')}
+                      className={`mt-5 rounded-lg px-5 py-3 text-sm font-semibold text-white transition ${theme.primary}`}
+                    >
+                      Back to Build
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="mb-3 rounded-lg border border-gray-200 bg-white px-4 py-3">
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+                      {formType === 'wizard' ? 'Step-by-step preview' : 'Single page preview'}
+                    </div>
+                    <div className="mt-1 text-sm text-gray-600">
+                      Uses the real form runtime. Submission is disabled in preview mode.
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 bg-white p-4">
+                    {formType === 'wizard' ? (
+                      <FormWizard
+                        schema={schema}
+                        form={previewForm}
+                        onSubmit={async () => {}}
+                        onCancel={() => {}}
+                        showCancel={false}
+                        submitText="Submit"
+                        title={previewForm.name}
+                        description={previewForm.description || 'Preview mode'}
+                        formTheme={formTheme}
+                        displayMode="embedded"
+                      />
+                    ) : (
+                      <FormBuilder
+                        schema={schema}
+                        form={previewForm}
+                        onSubmit={async () => {}}
+                        onCancel={() => {}}
+                        showCancel={false}
+                        submitText="Submit"
+                        formTheme={formTheme}
+                      />
+                    )}
+                  </div>
+                </div>
+              )
+            ) : schema.length === 0 ? (
+              <div className="flex min-h-[420px] items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 text-center">
+                <div>
+                  <div className="text-sm font-semibold uppercase tracking-[0.24em] text-gray-400">Start here</div>
+                  <h4 className="mt-3 text-2xl font-semibold text-gray-900">Create your first section</h4>
+                  <p className="mt-2 text-sm text-gray-500">Then drag field types from the library into each section.</p>
+                  <button
+                    type="button"
+                    onClick={addSection}
+                    className={`mt-5 rounded-lg px-5 py-3 text-sm font-semibold text-white transition ${theme.primary}`}
+                  >
+                    Add first section
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-6">
                 {Array.isArray(schema) && schema.map((section, sectionIndex) => (
                   <div
                     key={sectionIndex}
-                    className={`rounded-lg ${themeConfigs[formTheme].section}`}
+                    className={`rounded-lg ${theme.section}`}
                   >
                                          {/* Section Header */}
-                     <div className={`p-4 border-b ${themeConfigs[formTheme].border} ${themeConfigs[formTheme].secondary}`}>
+                     <div className={`p-4 border-b ${theme.border} ${theme.secondary}`}>
                        <div className="flex items-center justify-between">
                          <div className="flex-1">
                            <input
                              type="text"
                              value={section.title}
                              onChange={(e) => updateSection(sectionIndex, { title: e.target.value })}
-                             className={`text-lg font-semibold ${themeConfigs[formTheme].text} bg-transparent border-none outline-none w-full`}
+                             className={`text-lg font-semibold ${theme.text} bg-transparent border-none outline-none w-full`}
                              placeholder="Section Title"
                            />
                            <input
                              type="text"
                              value={section.description || ''}
                              onChange={(e) => updateSection(sectionIndex, { description: e.target.value })}
-                             className={`text-sm ${themeConfigs[formTheme].text} bg-transparent border-none outline-none w-full mt-1 opacity-75`}
+                             className={`text-sm ${theme.text} bg-transparent border-none outline-none w-full mt-1 opacity-75`}
                              placeholder="Section description (optional)"
                            />
                            
@@ -2439,7 +2652,8 @@ return mappingData[parentValue] || [];`;
                 ))}
               </div>
             )}
-          </div>
+            </div>
+          </main>
         </div>
 
         {/* Right Panel */}
@@ -2458,9 +2672,9 @@ return mappingData[parentValue] || [];`;
               Properties
             </button>
             <button
-              onClick={() => setRightPanelTab('preview')}
+              onClick={() => setRightPanelTab('structure')}
               className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                rightPanelTab === 'preview'
+                rightPanelTab === 'structure'
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
@@ -2500,6 +2714,7 @@ return mappingData[parentValue] || [];`;
               <div>
                 <strong>Total Fields:</strong> {Array.isArray(schema) ? schema.reduce((total, section) => total + (section.fields?.length || 0), 0) : 0}
               </div>
+              <p className="mt-2 text-xs text-gray-500">Drag fields to reorder within a section.</p>
             </div>
 
             <div className="space-y-3">
@@ -2515,8 +2730,42 @@ return mappingData[parentValue] || [];`;
                   {section.fields && section.fields.length > 0 && (
                     <div className="space-y-1">
                       {section.fields.map((field, fieldIndex) => (
-                        <div key={fieldIndex} className="text-xs bg-white p-2 rounded border">
+                        <div
+                          key={field.name || `${sectionIndex}-${fieldIndex}`}
+                          draggable
+                          onDragStart={() => setStructureDragState({ sectionIndex, fieldIndex })}
+                          onDragOver={(event) => {
+                            if (structureDragState?.sectionIndex === sectionIndex) {
+                              event.preventDefault();
+                            }
+                          }}
+                          onDrop={() => {
+                            if (
+                              structureDragState?.sectionIndex === sectionIndex
+                              && structureDragState.fieldIndex !== fieldIndex
+                            ) {
+                              moveField(sectionIndex, structureDragState.fieldIndex, fieldIndex);
+                            }
+                            setStructureDragState(null);
+                          }}
+                          onDragEnd={() => setStructureDragState(null)}
+                          onClick={() => {
+                            setSelectedField(`${sectionIndex}-${fieldIndex}`);
+                            setRightPanelTab('properties');
+                          }}
+                          className={`cursor-grab rounded border bg-white p-2 text-xs active:cursor-grabbing ${
+                            selectedField === `${sectionIndex}-${fieldIndex}`
+                              ? 'border-blue-400 ring-2 ring-blue-100'
+                              : 'border-gray-200 hover:border-blue-300'
+                          } ${
+                            structureDragState?.sectionIndex === sectionIndex
+                            && structureDragState?.fieldIndex === fieldIndex
+                              ? 'opacity-60'
+                              : ''
+                          }`}
+                        >
                           <div className="flex items-center space-x-1">
+                            <span className="text-gray-400" title="Drag to reorder">⋮⋮</span>
                             <span>{fieldTypes.find(ft => ft.type === field.type)?.icon || '📝'}</span>
                             <span className="font-medium">{field.label || field.name || 'Unnamed Field'}</span>
                             {field.required && <span className="text-red-500">*</span>}
@@ -2554,7 +2803,7 @@ return mappingData[parentValue] || [];`;
                                {isStandalone && (
                   <button
                     onClick={() => setShowSaveForm(true)}
-                    className={`w-full px-4 py-2 ${themeConfigs[formTheme].primary} rounded-lg transition-colors`}
+                    className={`w-full px-4 py-2 ${theme.primary} rounded-lg transition-colors`}
                   >
                     Save Form
                   </button>
@@ -2562,17 +2811,15 @@ return mappingData[parentValue] || [];`;
                 {!isStandalone && onSave && (
                   <button
                     onClick={() => {
-                      // If form already has a name (editing existing form), save directly
                       if (formName.trim()) {
                         handleSaveForm();
                       } else {
-                        // If no name (new form), show save dialog
                         setShowSaveForm(true);
                       }
                     }}
                     disabled={isSaving}
                     data-save-form
-                    className={`w-full px-4 py-2 ${themeConfigs[formTheme].primary} rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+                    className={`w-full px-4 py-2 ${theme.primary} rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     {isSaving ? 'Saving...' : (formName.trim() ? 'Save Changes' : 'Save Form')}
                   </button>
@@ -2581,6 +2828,7 @@ return mappingData[parentValue] || [];`;
           </div>
           )}
         </div>
+      </div>
       </div>
 
                {/* Options Editor Modal */}

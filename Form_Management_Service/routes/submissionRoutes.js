@@ -1,32 +1,24 @@
 const express = require('express');
 const router = express.Router();
 const submissionController = require('../controllers/submissionController');
+const validate = require('../middleware/validate');
 const { authenticate, optionalAuth } = require('../middleware/auth');
+const {
+  submissionListQuerySchema,
+  createSubmissionSchema,
+  updateSubmissionSchema,
+  submissionIdParamSchema,
+  formIdParamSchema
+} = require('../validators/submissionSchemas');
 
-// Public routes (submissions can be created without auth for public forms)
-// GET /api/submissions - Get all submissions (authenticated users only)
-router.get('/', authenticate, submissionController.getAllSubmissions);
+router.get('/form/:formId', authenticate, validate(formIdParamSchema, 'params'), validate(submissionListQuerySchema, 'query'), submissionController.getSubmissionsByForm);
+router.get('/form/:formId/stats', authenticate, validate(formIdParamSchema, 'params'), submissionController.getSubmissionStats);
+router.get('/form/:formId/export', authenticate, validate(formIdParamSchema, 'params'), submissionController.exportSubmissions);
 
-// GET /api/submissions/:id - Get submission by ID (authenticated users only)
-router.get('/:id', authenticate, submissionController.getSubmissionById);
+router.get('/', authenticate, validate(submissionListQuerySchema, 'query'), submissionController.getAllSubmissions);
+router.get('/:id', authenticate, validate(submissionIdParamSchema, 'params'), submissionController.getSubmissionById);
+router.post('/', optionalAuth, validate(createSubmissionSchema), submissionController.createSubmission);
+router.put('/:id', authenticate, validate(submissionIdParamSchema, 'params'), validate(updateSubmissionSchema), submissionController.updateSubmission);
+router.delete('/:id', authenticate, validate(submissionIdParamSchema, 'params'), submissionController.deleteSubmission);
 
-// POST /api/submissions - Create new submission (public, but sets userId if authenticated)
-router.post('/', optionalAuth, submissionController.createSubmission);
-
-// Protected routes (require authentication)
-// PUT /api/submissions/:id - Update submission (only user's submissions)
-router.put('/:id', authenticate, submissionController.updateSubmission);
-
-// DELETE /api/submissions/:id - Delete submission (only user's submissions)
-router.delete('/:id', authenticate, submissionController.deleteSubmission);
-
-// GET /api/submissions/form/:formId - Get submissions by form (user's forms only)
-router.get('/form/:formId', authenticate, submissionController.getSubmissionsByForm);
-
-// GET /api/submissions/form/:formId/stats - Get submission statistics (user's forms only)
-router.get('/form/:formId/stats', authenticate, submissionController.getSubmissionStats);
-
-// GET /api/submissions/form/:formId/export - Export submissions (user's forms only)
-router.get('/form/:formId/export', authenticate, submissionController.exportSubmissions);
-
-module.exports = router; 
+module.exports = router;

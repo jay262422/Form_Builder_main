@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const Form = require('../models/Form');
+const { appConfig } = require('../config/appConfig');
 const {
   createdResponse,
   errorResponse,
@@ -63,7 +64,13 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024
+    fileSize: appConfig.uploads.maxSizeMb * 1024 * 1024
+  },
+  fileFilter: (_req, file, cb) => {
+    if (appConfig.uploads.allowedMimeTypes.includes(file.mimetype)) {
+      return cb(null, true);
+    }
+    return cb(new Error(`File type not allowed: ${file.mimetype}`));
   }
 });
 
