@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import FormManagerDemo from "../FormManagerDemo";
 import FieldOptionsManager from "../components/FieldOptionsManager";
 import ErrorBoundary from "../components/ErrorBoundary";
-import ThemeEditorDemo from "../ThemeEditorDemo";
+import ThemeManager from "../components/ThemeManager";
 import ProtectedRoute from "../components/auth/ProtectedRoute";
 import LoadingSpinner from "../components/LoadingSpinner";
 import Toast from "../components/Toast";
@@ -14,7 +14,7 @@ import Toast from "../components/Toast";
 const HOME_TABS = [
   { id: "manager", label: "Form Manager", hint: "Create, organize, and edit forms" },
   { id: "fieldOptions", label: "Field Options", hint: "Create choice lists and reuse them on forms", devOnly: true },
-  { id: "themeEditor", label: "Theme Editor (Dev)", hint: "Customize visual themes", devOnly: true }
+  { id: "themeEditor", label: "Theme", hint: "Style a saved form", devOnly: true }
 ];
 
 export default function FormBuilderPage() {
@@ -127,7 +127,7 @@ export default function FormBuilderPage() {
             ) : activeDemo === "fieldOptions" ? (
               <FieldOptionsManager />
             ) : activeDemo === "themeEditor" ? (
-              <ThemeEditorDemo />
+              <ThemeManager />
             ) : (
               <FormManagerDemo
                 onViewStateChange={setManagerViewState}

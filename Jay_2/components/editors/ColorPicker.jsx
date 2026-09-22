@@ -103,29 +103,16 @@ export default function ColorPicker({ colors = {}, onChange }) {
   // Handle palette selection
   const handlePaletteSelect = (paletteName) => {
     const palette = colorPalettes[paletteName];
-    const updates = {};
-    
-    // Map palette colors to theme colors
-    if (paletteName === 'blue') {
-      updates.primary = palette[0];
-      updates.secondary = '#EBF4FF';
-      updates.border = palette[2];
-    } else if (paletteName === 'green') {
-      updates.primary = palette[0];
-      updates.secondary = '#ECFDF5';
-      updates.border = palette[2];
-    } else if (paletteName === 'purple') {
-      updates.primary = palette[0];
-      updates.secondary = '#F3F4F6';
-      updates.border = palette[2];
-    } else if (paletteName === 'gray') {
-      updates.primary = palette[0];
-      updates.secondary = '#F9FAFB';
-      updates.border = palette[1];
-      updates.text = palette[3];
-    }
-    
-    onChange(updates);
+    const updatesByPalette = {
+      blue: { primary: palette[0], secondary: '#EBF4FF', border: palette[2], focus: palette[0] },
+      green: { primary: palette[0], secondary: '#ECFDF5', border: palette[2], focus: palette[0] },
+      purple: { primary: palette[0], secondary: '#F5F3FF', border: palette[2], focus: palette[0] },
+      red: { primary: palette[0], secondary: '#FEF2F2', border: palette[2], focus: palette[0] },
+      gray: { primary: palette[0], secondary: '#F9FAFB', border: palette[1], text: palette[3], focus: palette[0] },
+      orange: { primary: palette[0], secondary: '#FFFBEB', border: palette[2], focus: palette[0] }
+    };
+
+    onChange(updatesByPalette[paletteName] || { primary: palette[0], focus: palette[0] });
   };
 
   return (
@@ -157,11 +144,10 @@ export default function ColorPicker({ colors = {}, onChange }) {
         </div>
       </div>
 
-      {/* Individual Color Controls */}
       <div>
-        <h3 className="text-sm font-medium text-gray-900 mb-3">Custom Colors</h3>
+        <h3 className="text-sm font-medium text-gray-900 mb-3">Main colors</h3>
         <div className="space-y-4">
-          {colorDefinitions.map(({ key, label, description, defaultValue }) => (
+          {colorDefinitions.filter((item) => ['primary', 'background', 'text', 'border', 'label'].includes(item.key)).map(({ key, label, description, defaultValue }) => (
             <div key={key} className="space-y-2">
               <div className="flex items-center justify-between">
                 <div>
@@ -209,57 +195,27 @@ export default function ColorPicker({ colors = {}, onChange }) {
         </div>
       </div>
 
-      {/* Color Preview */}
-      <div>
-        <h3 className="text-sm font-medium text-gray-900 mb-3">Color Preview</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
-            <div
-              className="h-8 rounded border"
-              style={{ 
-                backgroundColor: colors.primary || '#3B82F6',
-                borderColor: colors.border || '#D1D5DB'
-              }}
-            />
-            <span className="text-xs text-gray-600">Primary Button</span>
-          </div>
-          
-          <div className="space-y-2">
-            <div
-              className="h-8 rounded border"
-              style={{ 
-                backgroundColor: colors.secondary || '#F3F4F6',
-                borderColor: colors.border || '#D1D5DB'
-              }}
-            />
-            <span className="text-xs text-gray-600">Secondary Background</span>
-          </div>
-          
-          <div className="space-y-2">
-            <div
-              className="h-8 rounded border"
-              style={{ 
-                backgroundColor: colors.background || '#FFFFFF',
-                borderColor: colors.border || '#D1D5DB'
-              }}
-            />
-            <span className="text-xs text-gray-600">Form Background</span>
-          </div>
-          
-          <div className="space-y-2">
-            <div
-              className="h-8 rounded border flex items-center justify-center"
-              style={{ 
-                backgroundColor: colors.error || '#EF4444',
-                borderColor: colors.border || '#D1D5DB'
-              }}
-            >
-              <span className="text-xs text-white font-medium">Error</span>
+      <details className="rounded-lg border border-gray-200 p-3">
+        <summary className="cursor-pointer text-sm font-medium text-gray-800">More colors</summary>
+        <div className="mt-4 space-y-4">
+          {colorDefinitions.filter((item) => !['primary', 'background', 'text', 'border', 'label'].includes(item.key)).map(({ key, label, description, defaultValue }) => (
+            <div key={key} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">{label}</label>
+                  <p className="text-xs text-gray-500">{description}</p>
+                </div>
+                <input
+                  type="color"
+                  value={colors[key] || defaultValue}
+                  onChange={(e) => handleColorChange(key, e.target.value)}
+                  className="h-8 w-8 cursor-pointer rounded border border-gray-200"
+                />
+              </div>
             </div>
-            <span className="text-xs text-gray-600">Error State</span>
-          </div>
+          ))}
         </div>
-      </div>
+      </details>
     </div>
   );
 }

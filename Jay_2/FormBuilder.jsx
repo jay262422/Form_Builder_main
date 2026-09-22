@@ -4,6 +4,7 @@ import FormValidator from './utils/FormValidator';
 import { createInitialFormData } from './utils/formHelpers';
 import { getFormUI } from './utils/uiHelpers';
 import { convertCustomThemeToClasses, defaultFormThemeConfig } from './utils/themeConfigs';
+import { ensureThemeFonts, themeAppearanceCss } from './utils/themeAppearanceCss';
 
 /**
  * FormBuilder - Main component for creating dynamic forms
@@ -238,6 +239,10 @@ export default function FormBuilder({
     };
   }, [uiConfig]);
 
+  useEffect(() => {
+    if (uiConfig?.colors) ensureThemeFonts();
+  }, [uiConfig]);
+
   return (
     <div 
       className={`dynamic-form-builder ${className} ${themeConfig.colors.background} p-6`}
@@ -299,67 +304,7 @@ export default function FormBuilder({
       {/* Custom CSS for theme variables */}
       {uiConfig && uiConfig.colors && (
         <style dangerouslySetInnerHTML={{
-          __html: `
-            .dynamic-form-builder {
-              font-family: var(--form-font-family);
-            }
-            
-            .dynamic-form-builder input,
-            .dynamic-form-builder textarea,
-            .dynamic-form-builder select {
-              padding: var(--form-field-padding);
-              border-radius: var(--form-border-radius);
-              border: 1px solid var(--form-border-color);
-              font-size: var(--form-input-font-size);
-              font-weight: var(--form-input-font-weight);
-              font-family: var(--form-font-family);
-            }
-            
-            .dynamic-form-builder input:focus,
-            .dynamic-form-builder textarea:focus,
-            .dynamic-form-builder select:focus {
-              outline: none;
-              border-color: var(--form-focus-color);
-              box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-            }
-            
-            .dynamic-form-builder input::placeholder,
-            .dynamic-form-builder textarea::placeholder {
-              color: var(--form-placeholder-color);
-            }
-            
-            .dynamic-form-builder label {
-              font-size: var(--form-label-font-size);
-              font-weight: var(--form-label-font-weight);
-              color: var(--form-label-color);
-              font-family: var(--form-font-family);
-            }
-            
-            .dynamic-form-builder button[type="submit"] {
-              background-color: var(--form-primary-color);
-              color: white;
-              padding: var(--form-field-padding);
-              border-radius: var(--form-border-radius);
-              font-size: var(--form-input-font-size);
-              font-weight: 500;
-              font-family: var(--form-font-family);
-            }
-            
-            .dynamic-form-builder .error-message {
-              color: var(--form-error-color);
-              font-size: var(--form-error-font-size);
-              font-weight: var(--form-error-font-weight);
-              font-family: var(--form-font-family);
-            }
-            
-            .dynamic-form-builder .form-section {
-              margin-bottom: var(--form-section-margin);
-            }
-            
-            .dynamic-form-builder .form-field {
-              margin-bottom: var(--form-field-spacing);
-            }
-          `
+          __html: themeAppearanceCss('.dynamic-form-builder')
         }} />
       )}
     </div>

@@ -1,6 +1,6 @@
 import React from 'react';
 import DynamicForm from '../DynamicForm';
-import LayoutAwareFormSection from '../LayoutAwareFormSection';
+import { themeAppearanceCss } from '../../utils/themeAppearanceCss';
 
 /**
  * LivePreview - Component for showing real-time form preview with theme
@@ -164,7 +164,11 @@ export default function LivePreview({ form, theme, className = '' }) {
       {/* Form Preview */}
       <div className="preview-content overflow-y-auto max-h-[500px] lg:max-h-[550px] xl:max-h-[600px]">
         <DynamicForm
-          schema={previewForm.schema?.sections || previewForm.sections || []}
+          schema={
+            Array.isArray(previewForm.schema)
+              ? previewForm.schema
+              : (previewForm.schema?.sections || previewForm.sections || [])
+          }
           formData={{}}
           errors={{}}
           touched={{}}
@@ -174,6 +178,9 @@ export default function LivePreview({ form, theme, className = '' }) {
           theme={theme} // Pass theme to DynamicForm
           form={previewForm} // Pass merged form object for UI configuration
         />
+        <div className="px-1 pb-4">
+          <button type="button" className="theme-preview-submit">Submit</button>
+        </div>
       </div>
 
       {/* Preview Footer */}
@@ -187,87 +194,8 @@ export default function LivePreview({ form, theme, className = '' }) {
       {/* Custom CSS for theme preview */}
       <style dangerouslySetInnerHTML={{
         __html: `
-          .live-preview {
-            font-family: var(--form-font-family);
-          }
-          
-          .preview-form {
-            color: var(--form-text-color);
-            background-color: var(--form-background-color);
-          }
-          
-          .preview-form .form-section {
-            background-color: var(--form-section-color);
-            margin-bottom: var(--form-section-margin);
-          }
-          
-          .preview-form .form-section.no-box {
-            background-color: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            padding: 0 !important;
-          }
-          
-          .preview-form .form-section:not(.no-box) {
-            background-color: var(--form-section-color);
-          }
-          
-          .preview-form input,
-          .preview-form textarea,
-          .preview-form select {
-            padding: var(--form-field-padding);
-            border-radius: var(--form-border-radius);
-            border: 1px solid var(--form-border-color);
-            font-size: var(--form-input-font-size);
-            font-weight: var(--form-input-font-weight);
-            font-family: var(--form-font-family);
-          }
-          
-          .preview-form input:focus,
-          .preview-form textarea:focus,
-          .preview-form select:focus {
-            outline: none;
-            border-color: var(--form-focus-color);
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-          }
-          
-          .preview-form input::placeholder,
-          .preview-form textarea::placeholder {
-            color: var(--form-placeholder-color);
-          }
-          
-          .preview-form label {
-            font-size: var(--form-label-font-size);
-            font-weight: var(--form-label-font-weight);
-            color: var(--form-label-color);
-            font-family: var(--form-font-family);
-          }
-          
-          .preview-form button[type="submit"] {
-            background-color: var(--form-primary-color);
-            color: white;
-            padding: var(--form-field-padding);
-            border-radius: var(--form-border-radius);
-            font-size: var(--form-input-font-size);
-            font-weight: 500;
-            font-family: var(--form-font-family);
-          }
-          
-          .preview-form .error-message {
-            color: var(--form-error-color);
-            font-size: var(--form-error-font-size);
-            font-weight: var(--form-error-font-weight);
-            font-family: var(--form-font-family);
-          }
-          
-          .preview-form .form-section {
-            margin-bottom: var(--form-section-margin);
-          }
-          
-          .preview-form .form-field {
-            margin-bottom: var(--form-field-spacing);
-          }
-          
+          ${themeAppearanceCss('.live-preview')}
+
           .preview-content {
             scrollbar-width: thin;
             scrollbar-color: #CBD5E0 #F7FAFC;

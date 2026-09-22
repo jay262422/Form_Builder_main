@@ -37,7 +37,7 @@ exports.getAllForms = async (req, res) => {
 
     const [formsWithSchema, total] = await Promise.all([
       Form.find(query)
-        .select('id name description type status statistics createdAt updatedAt schema')
+        .select('id name description type status statistics createdAt updatedAt schema ui_part')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -61,6 +61,7 @@ exports.getAllForms = async (req, res) => {
         type: form.type,
         status: form.status,
         statistics: form.statistics,
+        ui_part: form.ui_part,
         createdAt: form.createdAt,
         updatedAt: form.updatedAt,
         sectionsCount,

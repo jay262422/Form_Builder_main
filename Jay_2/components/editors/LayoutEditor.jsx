@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 /**
  * LayoutEditor - Component for controlling form field layouts
@@ -9,77 +9,6 @@ import React, { useState } from 'react';
  * - Layout presets
  */
 export default function LayoutEditor({ layout, onChange, formSchema }) {
-  const [selectedField, setSelectedField] = useState(null);
-
-  // Layout presets for common form patterns
-  const layoutPresets = [
-    {
-      name: 'Contact Form',
-      description: 'Side-by-side name fields, full-width others',
-      layout: {
-        fieldWidths: {
-          firstName: 'half',
-          lastName: 'half',
-          email: 'full',
-          phone: 'full',
-          message: 'full'
-        },
-        fieldArrangement: [
-          ['firstName', 'lastName'],
-          ['email'],
-          ['phone'],
-          ['message']
-        ],
-        sectionStyle: 'minimal',
-        removeSectionBoxes: true
-      }
-    },
-    {
-      name: 'Registration Form',
-      description: 'All fields full-width, stacked',
-      layout: {
-        fieldWidths: {
-          firstName: 'full',
-          lastName: 'full',
-          email: 'full',
-          password: 'full',
-          confirmPassword: 'full'
-        },
-        fieldArrangement: [
-          ['firstName'],
-          ['lastName'],
-          ['email'],
-          ['password'],
-          ['confirmPassword']
-        ],
-        sectionStyle: 'card',
-        removeSectionBoxes: false
-      }
-    },
-    {
-      name: 'Compact Form',
-      description: 'All fields side-by-side where possible',
-      layout: {
-        fieldWidths: {
-          firstName: 'half',
-          lastName: 'half',
-          email: 'half',
-          phone: 'half',
-          company: 'full',
-          message: 'full'
-        },
-        fieldArrangement: [
-          ['firstName', 'lastName'],
-          ['email', 'phone'],
-          ['company'],
-          ['message']
-        ],
-        sectionStyle: 'minimal',
-        removeSectionBoxes: true
-      }
-    }
-  ];
-
   // Section style options
   const sectionStyles = [
     {
@@ -112,23 +41,11 @@ export default function LayoutEditor({ layout, onChange, formSchema }) {
 
   // Get all fields from form schema
   const getAllFields = () => {
-    if (!formSchema?.sections) return [];
-    
-    const fields = [];
-    formSchema.sections.forEach(section => {
-      if (section.fields) {
-        fields.push(...section.fields);
-      }
-    });
-    return fields;
+    const sections = Array.isArray(formSchema) ? formSchema : (formSchema?.sections || []);
+    return sections.flatMap((section) => section.fields || []);
   };
 
   const fields = getAllFields();
-
-  // Handle layout preset selection
-  const handlePresetSelect = (preset) => {
-    onChange(preset.layout);
-  };
 
   // Handle field width change
   const handleFieldWidthChange = (fieldName, width) => {
@@ -160,47 +77,9 @@ export default function LayoutEditor({ layout, onChange, formSchema }) {
 
   return (
     <div className="layout-editor space-y-6">
-      {/* Layout Presets */}
-      <div>
-        <h3 className="text-sm font-medium text-gray-900 mb-3">Quick Layouts</h3>
-        <div className="space-y-2">
-          {layoutPresets.map((preset) => (
-            <button
-              key={preset.name}
-              onClick={() => handlePresetSelect(preset)}
-              className="w-full text-left p-3 rounded-md border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium text-gray-900">
-                    {preset.name}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {preset.description}
-                  </div>
-                </div>
-                <div className="flex space-x-1">
-                  {preset.layout.fieldArrangement.slice(0, 2).map((row, index) => (
-                    <div key={index} className="flex space-x-1">
-                      {row.map((field, fieldIndex) => (
-                        <div
-                          key={fieldIndex}
-                          className={`w-2 h-2 rounded ${
-                            preset.layout.fieldWidths[field] === 'half' 
-                              ? 'bg-blue-400' 
-                              : 'bg-gray-400'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-
+      <p className="text-xs leading-5 text-gray-500">
+        This changes how sections and fields are drawn. It does not add, remove, or change what a field asks.
+      </p>
       {/* Section Styling */}
       <div>
         <h3 className="text-sm font-medium text-gray-900 mb-3">Section Style</h3>
@@ -279,35 +158,6 @@ export default function LayoutEditor({ layout, onChange, formSchema }) {
               </select>
             </div>
           ))}
-        </div>
-      </div>
-
-      {/* Layout Preview */}
-      <div>
-        <h3 className="text-sm font-medium text-gray-900 mb-3">Layout Preview</h3>
-        <div className="p-4 bg-white border border-gray-200 rounded-lg">
-          <div className="space-y-3">
-            {fields.slice(0, 4).map((field, index) => {
-              const width = layout.fieldWidths?.[field.name] || 'full';
-              const widthClass = {
-                'full': 'w-full',
-                'half': 'w-1/2',
-                'third': 'w-1/3',
-                'quarter': 'w-1/4'
-              }[width];
-
-              return (
-                <div key={field.name} className={`${widthClass} inline-block`}>
-                  <div className="h-6 bg-blue-100 border border-blue-200 rounded flex items-center justify-center">
-                    <span className="text-xs text-blue-700">{field.label || field.name}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="mt-2 text-xs text-gray-500">
-            This shows how fields will be arranged in your form
-          </div>
         </div>
       </div>
     </div>

@@ -58,12 +58,12 @@ export default function TypographyControls({ typography, onChange }) {
 
   // Font family options
   const fontFamilies = [
-    { value: 'Inter', label: 'Inter (Modern)', preview: 'Inter' },
-    { value: 'Roboto', label: 'Roboto (Clean)', preview: 'Roboto' },
-    { value: 'Open Sans', label: 'Open Sans (Friendly)', preview: 'Open Sans' },
-    { value: 'Lato', label: 'Lato (Professional)', preview: 'Lato' },
-    { value: 'Poppins', label: 'Poppins (Modern)', preview: 'Poppins' },
-    { value: 'system-ui', label: 'System Font (Native)', preview: 'System Font' }
+    { value: 'Inter, system-ui', label: 'Modern', preview: 'Inter' },
+    { value: 'Roboto, system-ui', label: 'Clean', preview: 'Roboto' },
+    { value: 'Open Sans, system-ui', label: 'Friendly', preview: 'Open Sans' },
+    { value: 'Lato, system-ui', label: 'Professional', preview: 'Lato' },
+    { value: 'Poppins, system-ui', label: 'Rounded', preview: 'Poppins' },
+    { value: 'system-ui', label: 'System', preview: 'System' }
   ];
 
   // Preset typography options
@@ -144,7 +144,7 @@ export default function TypographyControls({ typography, onChange }) {
               key={font.value}
               onClick={() => handleFontFamilyChange(font.value)}
               className={`p-3 rounded-md border transition-colors text-left ${
-                typography.fontFamily === font.value
+                (typography.fontFamily || 'system-ui') === font.value
                   ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
               }`}
@@ -264,57 +264,6 @@ export default function TypographyControls({ typography, onChange }) {
         </div>
       </div>
 
-      {/* Typography Preview */}
-      <div>
-        <h3 className="text-sm font-medium text-gray-900 mb-3">Form Preview</h3>
-        <div className="space-y-3 p-4 bg-white border border-gray-200 rounded-lg">
-          {/* Label */}
-          <div>
-            <label
-              className="block text-gray-700 mb-1"
-              style={{
-                fontSize: typography.labelFontSize || '14px',
-                fontWeight: typography.labelFontWeight || '500',
-                fontFamily: typography.fontFamily || 'system-ui'
-              }}
-            >
-              Email Address
-            </label>
-            <input
-              type="email"
-              placeholder="Enter your email"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              style={{
-                fontSize: typography.inputFontSize || '16px',
-                fontWeight: typography.inputFontWeight || '400',
-                fontFamily: typography.fontFamily || 'system-ui'
-              }}
-            />
-            <p
-              className="mt-1 text-red-600"
-              style={{
-                fontSize: typography.errorFontSize || '12px',
-                fontWeight: typography.errorFontWeight || '400',
-                fontFamily: typography.fontFamily || 'system-ui'
-              }}
-            >
-              Please enter a valid email address
-            </p>
-          </div>
-          
-          {/* Button */}
-          <button
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            style={{
-              fontSize: typography.inputFontSize || '16px',
-              fontWeight: '500',
-              fontFamily: typography.fontFamily || 'system-ui'
-            }}
-          >
-            Submit Form
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

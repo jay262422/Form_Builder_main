@@ -201,54 +201,6 @@ export default function SpacingControls({ spacing, onChange }) {
           ))}
         </div>
       </div>
-
-      {/* Spacing Preview */}
-      <div>
-        <h3 className="text-sm font-medium text-gray-900 mb-3">Spacing Preview</h3>
-        <div className="space-y-3">
-          {/* Field Preview */}
-          <div className="space-y-2">
-            <div className="text-xs text-gray-600">Field with padding</div>
-            <div
-              className="border rounded bg-gray-50"
-              style={{
-                padding: spacing.fieldPadding || '12px',
-                borderRadius: spacing.borderRadius || '8px',
-                borderColor: '#D1D5DB'
-              }}
-            >
-              <div className="h-4 bg-white rounded border border-gray-300"></div>
-            </div>
-          </div>
-          
-          {/* Section Preview */}
-          <div className="space-y-2">
-            <div className="text-xs text-gray-600">Section spacing</div>
-            <div className="space-y-2">
-              <div
-                className="h-8 bg-blue-100 rounded border border-blue-200"
-                style={{ marginBottom: spacing.sectionMargin || '24px' }}
-              ></div>
-              <div
-                className="h-8 bg-green-100 rounded border border-green-200"
-                style={{ marginBottom: spacing.fieldSpacing || '16px' }}
-              ></div>
-              <div className="h-8 bg-purple-100 rounded border border-purple-200"></div>
-            </div>
-          </div>
-          
-          {/* Button Preview */}
-          <div className="space-y-2">
-            <div className="text-xs text-gray-600">Button with border radius</div>
-            <div
-              className="h-8 bg-blue-600 text-white flex items-center justify-center text-sm font-medium"
-              style={{ borderRadius: spacing.borderRadius || '8px' }}
-            >
-              Sample Button
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

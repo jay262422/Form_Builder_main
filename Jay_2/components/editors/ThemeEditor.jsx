@@ -4,6 +4,104 @@ import SpacingControls from './SpacingControls';
 import TypographyControls from './TypographyControls';
 import LayoutEditor from './LayoutEditor';
 import LivePreview from '../preview/LivePreview';
+import { ensureThemeFonts } from '../../utils/themeAppearanceCss';
+
+const FORM_LOOKS = [
+  {
+    id: 'clean',
+    name: 'Clean',
+    description: 'White page, blue button, easy to read',
+    sectionStyle: 'card',
+    colors: {
+      primary: '#2563EB', secondary: '#F8FAFC', border: '#E2E8F0', text: '#0F172A',
+      background: '#FFFFFF', error: '#DC2626', success: '#059669', warning: '#D97706',
+      label: '#334155', placeholder: '#94A3B8', focus: '#2563EB', section: '#FFFFFF'
+    },
+    spacing: { fieldPadding: '12px', sectionMargin: '24px', borderRadius: '8px', fieldSpacing: '16px' },
+    typography: { fontFamily: 'Inter, system-ui', labelFontSize: '14px', labelFontWeight: '500', inputFontSize: '16px', inputFontWeight: '400', errorFontSize: '12px', errorFontWeight: '400' }
+  },
+  {
+    id: 'soft',
+    name: 'Soft',
+    description: 'Rounded fields on a calm gray page',
+    sectionStyle: 'card',
+    colors: {
+      primary: '#0F766E', secondary: '#F0FDFA', border: '#CCFBF1', text: '#134E4A',
+      background: '#F8FAFC', error: '#DC2626', success: '#059669', warning: '#D97706',
+      label: '#115E59', placeholder: '#94A3B8', focus: '#0F766E', section: '#FFFFFF'
+    },
+    spacing: { fieldPadding: '14px', sectionMargin: '28px', borderRadius: '14px', fieldSpacing: '20px' },
+    typography: { fontFamily: 'Poppins, system-ui', labelFontSize: '14px', labelFontWeight: '500', inputFontSize: '16px', inputFontWeight: '400', errorFontSize: '12px', errorFontWeight: '400' }
+  },
+  {
+    id: 'bold',
+    name: 'Bold',
+    description: 'Strong black button and heavier labels',
+    sectionStyle: 'outlined',
+    colors: {
+      primary: '#111827', secondary: '#F3F4F6', border: '#D1D5DB', text: '#111827',
+      background: '#FFFFFF', error: '#DC2626', success: '#059669', warning: '#D97706',
+      label: '#111827', placeholder: '#6B7280', focus: '#111827', section: '#FFFFFF'
+    },
+    spacing: { fieldPadding: '12px', sectionMargin: '20px', borderRadius: '4px', fieldSpacing: '14px' },
+    typography: { fontFamily: 'Roboto, system-ui', labelFontSize: '15px', labelFontWeight: '700', inputFontSize: '16px', inputFontWeight: '400', errorFontSize: '12px', errorFontWeight: '500' }
+  },
+  {
+    id: 'warm',
+    name: 'Warm',
+    description: 'Stone page with an amber button',
+    sectionStyle: 'card',
+    colors: {
+      primary: '#C2410C', secondary: '#FFF7ED', border: '#FED7AA', text: '#431407',
+      background: '#FFFBEB', error: '#DC2626', success: '#059669', warning: '#D97706',
+      label: '#7C2D12', placeholder: '#A8A29E', focus: '#C2410C', section: '#FFFFFF'
+    },
+    spacing: { fieldPadding: '12px', sectionMargin: '24px', borderRadius: '10px', fieldSpacing: '18px' },
+    typography: { fontFamily: 'Lato, system-ui', labelFontSize: '15px', labelFontWeight: '600', inputFontSize: '16px', inputFontWeight: '400', errorFontSize: '13px', errorFontWeight: '400' }
+  },
+  {
+    id: 'ink',
+    name: 'Ink',
+    description: 'Dark form with light text',
+    sectionStyle: 'outlined',
+    colors: {
+      primary: '#38BDF8', secondary: '#1F2937', border: '#374151', text: '#F9FAFB',
+      background: '#111827', error: '#F87171', success: '#34D399', warning: '#FBBF24',
+      label: '#E5E7EB', placeholder: '#9CA3AF', focus: '#38BDF8', section: '#1F2937'
+    },
+    spacing: { fieldPadding: '12px', sectionMargin: '24px', borderRadius: '10px', fieldSpacing: '16px' },
+    typography: { fontFamily: 'Inter, system-ui', labelFontSize: '14px', labelFontWeight: '500', inputFontSize: '16px', inputFontWeight: '400', errorFontSize: '12px', errorFontWeight: '400' }
+  }
+];
+
+function AppearanceLooks({ theme, onApply }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-xs leading-5 text-gray-500">
+        Pick a look for the whole form. You can still change color, type, and spacing after.
+      </p>
+      {FORM_LOOKS.map((look) => {
+        const selected = theme.colors?.primary === look.colors.primary && theme.colors?.background === look.colors.background;
+        return (
+          <button
+            key={look.id}
+            type="button"
+            onClick={() => onApply(look)}
+            className={`w-full rounded-lg border p-3 text-left ${
+              selected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <div className="mb-2 flex h-8 overflow-hidden rounded border" style={{ borderColor: look.colors.border, background: look.colors.background }}>
+              <div className="w-1/3" style={{ background: look.colors.primary }} />
+            </div>
+            <div className="text-sm font-medium text-gray-900">{look.name}</div>
+            <div className="text-xs text-gray-500">{look.description}</div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 /**
  * ThemeEditor - Main component for customizing form themes
@@ -23,56 +121,39 @@ export default function ThemeEditor({
 }) {
   // Convert ui_part structure to theme structure if needed
   const convertUIToTheme = (uiPart) => {
-    if (!uiPart) return getDefaultTheme();
-    
-    // If it's already a full theme structure, return as is
-    if (uiPart.colors && uiPart.spacing && uiPart.typography) {
-      return uiPart;
-    }
-    
-    // If it's a ui_part structure, convert it
+    const defaults = getDefaultTheme();
+    if (!uiPart) return defaults;
+
+    const hasEditorShape = uiPart.colors && uiPart.spacing && uiPart.typography;
+    const layout = hasEditorShape && uiPart.layout?.fieldWidths
+      ? {
+          ...defaults.layout,
+          ...uiPart.layout
+        }
+      : {
+          fieldWidths: uiPart.layout && !uiPart.layout.fieldWidths ? uiPart.layout : (uiPart.layout?.fieldWidths || {}),
+          sectionStyle: uiPart.sectionStyle || uiPart.layout?.sectionStyle || 'card',
+          removeSectionBoxes: uiPart.removeSectionBoxes ?? uiPart.layout?.removeSectionBoxes ?? false
+        };
+
     return {
-      name: 'Custom Theme',
-      description: 'A custom theme created with the theme editor',
-      colors: {
-        primary: '#3B82F6',
-        secondary: '#F3F4F6',
-        border: '#D1D5DB',
-        text: '#111827',
-        background: '#FFFFFF',
-        error: '#EF4444',
-        success: '#10B981',
-        warning: '#F59E0B',
-        label: '#374151',
-        placeholder: '#9CA3AF',
-        focus: '#3B82F6',
-        section: '#FFFFFF'
-      },
-      spacing: {
-        fieldPadding: '12px',
-        sectionMargin: '24px',
-        borderRadius: '8px',
-        fieldSpacing: '16px'
-      },
-      typography: {
-        labelFontSize: '14px',
-        labelFontWeight: '500',
-        inputFontSize: '16px',
-        inputFontWeight: '400',
-        errorFontSize: '12px',
-        errorFontWeight: '400'
-      },
-      layout: {
-        fieldWidths: uiPart.layout || {},
-        sectionStyle: uiPart.sectionStyle || 'card',
-        removeSectionBoxes: uiPart.removeSectionBoxes || false
-      }
+      ...defaults,
+      name: uiPart.name || defaults.name,
+      description: uiPart.description || defaults.description,
+      colors: { ...defaults.colors, ...(uiPart.colors || {}) },
+      spacing: { ...defaults.spacing, ...(uiPart.spacing || {}) },
+      typography: { ...defaults.typography, ...(uiPart.typography || {}) },
+      layout
     };
   };
 
   const [theme, setTheme] = useState(convertUIToTheme(initialTheme));
-  const [activeTab, setActiveTab] = useState('colors');
+  const [activeTab, setActiveTab] = useState('look');
   const [isDirty, setIsDirty] = useState(false);
+
+  useEffect(() => {
+    ensureThemeFonts();
+  }, []);
 
   // Update dirty state when theme changes
   useEffect(() => {
@@ -81,11 +162,6 @@ export default function ThemeEditor({
       setIsDirty(JSON.stringify(theme) !== JSON.stringify(convertedInitial));
     }
   }, [theme, initialTheme]);
-
-  // Handle theme updates
-  const updateTheme = (updates) => {
-    setTheme(prev => ({ ...prev, ...updates }));
-  };
 
   // Handle color updates
   const updateColors = (colors) => {
@@ -107,8 +183,22 @@ export default function ThemeEditor({
     setTheme(prev => ({ ...prev, layout }));
   };
 
+  const applyLook = (look) => {
+    setTheme((prev) => ({
+      ...prev,
+      colors: { ...look.colors },
+      spacing: { ...look.spacing },
+      typography: { ...prev.typography, ...look.typography },
+      layout: {
+        ...prev.layout,
+        sectionStyle: look.sectionStyle,
+        removeSectionBoxes: look.sectionStyle === 'minimal'
+      }
+    }));
+  };
+
   // Save theme
-  const handleSave = () => {
+  const handleSave = async () => {
     // Convert theme back to ui_part structure for saving
     const uiPart = {
       themeId: 'custom',
@@ -120,8 +210,12 @@ export default function ThemeEditor({
       typography: theme.typography
     };
     
-    onSave?.(uiPart);
-    setIsDirty(false);
+    try {
+      await onSave?.(uiPart);
+      setIsDirty(false);
+    } catch (error) {
+      console.error('Failed to save theme:', error);
+    }
   };
 
   // Reset to default
@@ -160,7 +254,7 @@ export default function ThemeEditor({
       <div className="flex items-center justify-between p-6 border-b border-gray-200">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Theme Editor</h2>
-          <p className="text-sm text-gray-600">Customize your form's appearance</p>
+          <p className="text-sm text-gray-600">Appearance only. Fields and rules stay in the form builder.</p>
         </div>
         <div className="flex items-center space-x-2">
           <button
@@ -184,34 +278,35 @@ export default function ThemeEditor({
         </div>
       </div>
 
-             <div className="flex flex-col lg:flex-row h-[800px] lg:h-[850px] xl:h-[900px]">
-        {/* Sidebar - Theme Controls */}
-        <div className="w-full lg:w-72 xl:w-80 border-b lg:border-b-0 lg:border-r border-gray-200 overflow-y-auto">
-          {/* Tabs */}
-          <div className="flex border-b border-gray-200">
+             <div className="flex h-[780px] flex-col lg:flex-row">
+        <div className="flex min-h-0 w-full border-b border-gray-200 lg:w-[420px] lg:border-b-0 lg:border-r">
+          <div className="flex w-28 shrink-0 flex-col border-r border-gray-200 bg-gray-50">
             {[
-              { id: 'colors', label: 'Colors', icon: '🎨' },
-              { id: 'spacing', label: 'Spacing', icon: '📏' },
-              { id: 'typography', label: 'Typography', icon: '📝' },
-              { id: 'layout', label: 'Layout', icon: '📐' }
-            ].map(tab => (
+              { id: 'look', label: 'Look' },
+              { id: 'colors', label: 'Color' },
+              { id: 'typography', label: 'Type' },
+              { id: 'spacing', label: 'Space' },
+              { id: 'layout', label: 'Sections' }
+            ].map((tab) => (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                className={`px-3 py-3 text-left text-sm font-medium ${
                   activeTab === tab.id
-                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    ? 'bg-white text-blue-700'
+                    : 'text-gray-600 hover:bg-white hover:text-gray-900'
                 }`}
               >
-                <span className="mr-2">{tab.icon}</span>
                 {tab.label}
               </button>
             ))}
           </div>
 
-          {/* Tab Content */}
-          <div className="p-3 lg:p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            {activeTab === 'look' && (
+              <AppearanceLooks theme={theme} onApply={applyLook} />
+            )}
             {activeTab === 'colors' && (
               <ColorPicker
                 colors={theme.colors}
@@ -291,14 +386,18 @@ function getDefaultTheme() {
     name: 'Custom Theme',
     description: 'A custom theme created with the theme editor',
     colors: {
-      primary: '#3B82F6',
-      secondary: '#F3F4F6',
-      border: '#D1D5DB',
-      text: '#111827',
+      primary: '#2563EB',
+      secondary: '#F8FAFC',
+      border: '#E2E8F0',
+      text: '#0F172A',
       background: '#FFFFFF',
-      error: '#EF4444',
-      success: '#10B981',
-      warning: '#F59E0B'
+      error: '#DC2626',
+      success: '#059669',
+      warning: '#D97706',
+      label: '#334155',
+      placeholder: '#94A3B8',
+      focus: '#2563EB',
+      section: '#FFFFFF'
     },
     spacing: {
       fieldPadding: '12px',
