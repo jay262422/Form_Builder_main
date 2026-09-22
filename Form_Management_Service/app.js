@@ -5,7 +5,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
 const { appConfig } = require('./config/appConfig');
-const { generalLimiter, authLimiter, submissionLimiter } = require('./config/rateLimit');
+const { generalLimiter, submissionLimiter } = require('./config/rateLimit');
 const { sanitizeRequestBody } = require('./utils/sanitizeInput');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
@@ -29,7 +29,16 @@ const createApp = () => {
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.use(sanitizeRequestBody);
   app.use(generalLimiter);
-  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+  app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+    setHeaders(res, filePath) {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+      const extension = path.extname(filePath).toLowerCase();
+      if (!['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(extension)) {
+        res.setHeader('Content-Disposition', 'attachment');
+      }
+    }
+  }));
 
   app.get('/health', (req, res) => {
     res.status(200).json({
@@ -44,7 +53,7 @@ const createApp = () => {
     });
   });
 
-  app.use('/api/auth', authLimiter, authRoutes);
+  app.use('/api/auth', authRoutes);
   app.use('/api/forms', formRoutes);
   app.use('/api/field-options', fieldOptionsRoutes);
   app.use('/api/dynamic-mappings', dynamicMappingsRoutes);

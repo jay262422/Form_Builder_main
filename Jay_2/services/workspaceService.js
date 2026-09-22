@@ -44,6 +44,14 @@ class WorkspaceService {
     return parseApiResponse(response);
   }
 
+  async revokeInvite(email) {
+    const url = SIMPLE_API_CONFIG.getEndpointURL('workspaces', 'revokeInvite', { email });
+    const response = await authenticatedFetch(url, {
+      method: 'DELETE'
+    });
+    return parseApiResponse(response);
+  }
+
   async removeMember(userId) {
     const url = SIMPLE_API_CONFIG.getEndpointURL('workspaces', 'removeMember', { userId });
     const response = await authenticatedFetch(url, {

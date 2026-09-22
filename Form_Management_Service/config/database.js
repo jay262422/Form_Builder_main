@@ -11,6 +11,24 @@ const connectDB = async () => {
 
     console.log('MongoDB connected successfully');
 
+    const FieldOption = require('../models/FieldOption');
+    await FieldOption.updateMany(
+      { ownerId: null, isTemplate: { $ne: true } },
+      { $set: { isTemplate: true } }
+    );
+    try {
+      await FieldOption.collection.dropIndex('optionType_1');
+    } catch (indexError) {
+      if (indexError?.codeName !== 'IndexNotFound' && indexError?.code !== 27) {
+        console.warn('Could not replace the old option type index:', indexError.message);
+      }
+    }
+    try {
+      await FieldOption.syncIndexes();
+    } catch (syncError) {
+      console.warn('Could not sync option set indexes:', syncError.message);
+    }
+
     mongoose.connection.on('error', (err) => {
       console.error('MongoDB connection error:', err);
     });

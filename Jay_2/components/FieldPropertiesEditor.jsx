@@ -219,15 +219,6 @@ export default function FieldPropertiesEditor({
     }
   };
 
-  // Custom validation function examples
-  const customValidationExamples = {
-    'Check if value is even': 'return value % 2 === 0;',
-    'Check if value contains specific word': 'return value.toLowerCase().includes("required");',
-    'Check if value matches another field': 'return value === formData.otherField;',
-    'Check if value is a valid age': 'const age = parseInt(value); return age >= 18 && age <= 120;',
-    'Check if value is a valid percentage': 'const percent = parseFloat(value); return percent >= 0 && percent <= 100;'
-  };
-
   if (!isOpen) return null;
 
   return (
@@ -527,17 +518,17 @@ export default function FieldPropertiesEditor({
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Custom Validation Function (JavaScript)
+                    Custom Validation Function
                   </label>
                   <textarea
                     value={formData.validation.customValidation}
-                    onChange={(e) => handleChange('validation', 'customValidation', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                    placeholder="// Example: return value.length >= 5;"
+                    readOnly
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 font-mono text-sm"
+                    placeholder="Not used"
                     rows={4}
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Write JavaScript code that returns true for valid values, false for invalid. Use 'value' for the field value.
+                    Custom JavaScript checks are turned off. Use the length, pattern, and range rules above.
                   </p>
                 </div>
 
@@ -554,26 +545,6 @@ export default function FieldPropertiesEditor({
                   />
                 </div>
 
-                {/* Custom Validation Examples */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Custom Validation Examples
-                  </label>
-                  <div className="space-y-2">
-                    {Object.entries(customValidationExamples).map(([description, example]) => (
-                      <button
-                        key={description}
-                        onClick={() => {
-                          handleChange('validation', 'customValidation', example);
-                        }}
-                        className="block w-full text-left p-2 text-sm bg-gray-50 hover:bg-gray-100 rounded-md border border-gray-200"
-                      >
-                        <div className="font-medium text-gray-700">{description}</div>
-                        <div className="text-xs text-gray-500 font-mono">{example}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
 
               {/* Enhanced Validation Templates */}

@@ -73,6 +73,19 @@ const hasWorkspaceRole = (user, allowedRoles = []) => {
   return allowedRoles.includes(user.workspaceRole || 'viewer');
 };
 
+const sameId = (left, right) => Boolean(left) && Boolean(right) && left.toString() === right.toString();
+
+const userCanAccessForm = (form, user) => {
+  if (!form || !user) return false;
+
+  const userId = user._id || user.id || user.userId;
+  if (form.workspaceId) {
+    return sameId(form.workspaceId, user.workspaceId);
+  }
+
+  return sameId(form.userId, userId);
+};
+
 const generateInviteToken = () => crypto.randomBytes(24).toString('hex');
 
 const updateUserWorkspaceContext = async (userId, workspaceId, workspaceRole) => {
@@ -90,6 +103,7 @@ module.exports = {
   ensureUserWorkspace,
   buildScopedFormQuery,
   hasWorkspaceRole,
+  userCanAccessForm,
   generateInviteToken,
   updateUserWorkspaceContext
 };

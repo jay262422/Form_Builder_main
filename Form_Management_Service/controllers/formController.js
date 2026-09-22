@@ -26,10 +26,11 @@ exports.getAllForms = async (req, res) => {
     const { type, isPublished, isTemplate } = req.query;
     const { page, limit, skip } = parsePagination(req.query);
 
-    const query = buildScopedFormQuery(req, {});
     if (!req.userId) {
-      query['status.isPublished'] = true;
+      return unauthorizedResponse(res, 'Authentication required');
     }
+
+    const query = buildScopedFormQuery(req, {});
 
     if (type) query.type = type;
     if (isPublished !== undefined) query['status.isPublished'] = isPublished === 'true' || isPublished === true;
@@ -104,6 +105,9 @@ exports.getFormByCustomId = async (req, res) => {
 exports.createForm = async (req, res) => {
   try {
     const formData = req.body;
+    delete formData.userId;
+    delete formData.workspaceId;
+    delete formData.statistics;
     
     // Validate required fields
     if (!formData.name || !formData.schema) {
@@ -191,7 +195,13 @@ exports.createForm = async (req, res) => {
 exports.updateForm = async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const updates = { ...req.body };
+    delete updates.userId;
+    delete updates.workspaceId;
+    delete updates._id;
+    delete updates.id;
+    delete updates.statistics;
+    delete updates.createdAt;
     
     const query = buildScopedFormQuery(req, { id });
     
@@ -386,7 +396,8 @@ exports.exportForm = async (req, res) => {
     delete exportData.__v;
     
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename="${form.name}.json"`);
+    const safeFileName = String(form.name || 'form').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80) || 'form';
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}.json"`);
     res.json(exportData);
     return;
   } catch (error) {

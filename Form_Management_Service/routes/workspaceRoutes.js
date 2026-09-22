@@ -7,6 +7,7 @@ router.get('/me', authenticate, workspaceController.getMyWorkspace);
 router.put('/me', authenticate, workspaceController.updateMyWorkspace);
 router.post('/me/invite', authenticate, workspaceController.inviteMember);
 router.post('/invitations/accept', authenticate, workspaceController.acceptInvitation);
+router.delete('/me/invitations/:email', authenticate, workspaceController.revokeInvitation);
 router.patch('/me/members/:userId/role', authenticate, workspaceController.updateMemberRole);
 router.delete('/me/members/:userId', authenticate, workspaceController.removeMember);
 

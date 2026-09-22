@@ -13,7 +13,7 @@ const {
   restoreVersionParamSchema
 } = require('../validators/formSchemas');
 
-router.get('/', optionalAuth, validate(formListQuerySchema, 'query'), formController.getAllForms);
+router.get('/', authenticate, validate(formListQuerySchema, 'query'), formController.getAllForms);
 router.get('/:id', optionalAuth, validate(formIdParamSchema, 'params'), formController.getFormByCustomId);
 
 router.post('/', authenticate, authorizeWorkspace(...WORKSPACE_MUTATION_ROLES), validate(createFormSchema), formController.createForm);

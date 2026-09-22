@@ -3,6 +3,7 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const validate = require('../middleware/validate');
 const { authenticate } = require('../middleware/auth');
+const { authLimiter } = require('../config/rateLimit');
 const {
   registerSchema,
   loginSchema,
@@ -15,11 +16,11 @@ const {
   logoutSchema
 } = require('../validators/authSchemas');
 
-router.post('/register', validate(registerSchema), authController.register);
-router.post('/login', validate(loginSchema), authController.login);
-router.post('/refresh', validate(refreshTokenSchema), authController.refreshToken);
-router.post('/forgot-password', validate(forgotPasswordSchema), authController.forgotPassword);
-router.post('/reset-password', validate(resetPasswordSchema), authController.resetPassword);
+router.post('/register', authLimiter, validate(registerSchema), authController.register);
+router.post('/login', authLimiter, validate(loginSchema), authController.login);
+router.post('/refresh', authLimiter, validate(refreshTokenSchema), authController.refreshToken);
+router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), authController.forgotPassword);
+router.post('/reset-password', authLimiter, validate(resetPasswordSchema), authController.resetPassword);
 router.post('/verify-email', validate(verifyEmailSchema), authController.verifyEmail);
 
 router.get('/me', authenticate, authController.getCurrentUser);

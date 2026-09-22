@@ -1,10 +1,18 @@
 const FieldOption = require('../models/FieldOption');
+const {
+  canShareTemplates,
+  canEditSet,
+  visibleSetsQuery,
+  findReadableSet,
+  stampOwner
+} = require('../utils/fieldOptionAccess');
 const { logAuditEvent } = require('../utils/auditLogger');
 const {
   successResponse,
   errorResponse,
   validationError,
   notFoundResponse,
+  forbiddenResponse,
   conflictResponse,
   createdResponse
 } = require('../utils/responseHelper');
@@ -14,7 +22,7 @@ exports.getAllFieldOptionTypes = async (req, res) => {
   try {
     const { isActive, category } = req.query;
     
-    const query = {};
+    const query = visibleSetsQuery(req.user);
     
     // Only filter by isActive if explicitly provided
     if (isActive !== undefined) {
@@ -24,7 +32,7 @@ exports.getAllFieldOptionTypes = async (req, res) => {
     if (category) query['metadata.category'] = category;
     
     const optionTypes = await FieldOption.find(query)
-      .sort({ optionType: 1 });
+      .sort({ isTemplate: -1, optionType: 1 });
     
     // Convert to frontend-compatible structure
     const fieldOptions = {};
@@ -53,10 +61,7 @@ exports.getOptionsByType = async (req, res) => {
       return validationError(res, 'optionType parameter is required');
     }
     
-    const fieldOption = await FieldOption.findOne({ 
-      optionType, 
-      isActive: true 
-    });
+    const fieldOption = await findReadableSet(optionType, req.user);
     
     if (!fieldOption) {
       return notFoundResponse(res, 'Option type not found');
@@ -86,7 +91,8 @@ exports.getOptionsByType = async (req, res) => {
 // Get all option types (summary)
 exports.getOptionTypes = async (req, res) => {
   try {
-    const optionTypes = await FieldOption.find({}, 'optionType metadata').sort({ optionType: 1 });
+    const optionTypes = await FieldOption.find(visibleSetsQuery(req.user), 'optionType metadata isTemplate ownerId')
+      .sort({ isTemplate: 1, optionType: 1 });
     return successResponse(res, {
       optionTypes: optionTypes,
       total: optionTypes.length
@@ -100,7 +106,7 @@ exports.getOptionTypes = async (req, res) => {
 // Create new field option type
 exports.createFieldOptionType = async (req, res) => {
   try {
-    const { optionType, options, metadata } = req.body;
+    const { optionType, options, metadata, isTemplate } = req.body;
     
     if (!optionType) {
       return validationError(res, 'optionType is required');
@@ -117,16 +123,23 @@ exports.createFieldOptionType = async (req, res) => {
       }
     }
     
-    // Check if option type already exists
-    const existingOption = await FieldOption.findOne({ optionType });
+    const asTemplate = isTemplate === true;
+    if (asTemplate && !canShareTemplates(req.user)) {
+      return forbiddenResponse(res, 'Only an admin can publish an example list');
+    }
+
+    const existingOption = await FieldOption.findOne(asTemplate
+      ? { optionType, isTemplate: true }
+      : { optionType, ownerId: req.userId, isTemplate: { $ne: true } });
     if (existingOption) {
-      return conflictResponse(res, 'Option type already exists');
+      return conflictResponse(res, 'You already have an option set with this name');
     }
     
     const fieldOption = new FieldOption({
       optionType,
       options: options,
       isActive: true,
+      ...stampOwner(req.user, asTemplate),
       metadata: {
         description: metadata?.description || `Options for ${optionType}`,
         category: metadata?.category || 'custom',
@@ -159,8 +172,19 @@ exports.createFieldOptionType = async (req, res) => {
 exports.updateFieldOptionType = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = { ...req.body };
+    delete updateData.ownerId;
+    delete updateData.workspaceId;
+    delete updateData.isTemplate;
     
+    const existing = await FieldOption.findById(id);
+    if (!existing) {
+      return notFoundResponse(res, 'Field option type not found');
+    }
+    if (!canEditSet(existing, req.user)) {
+      return forbiddenResponse(res, 'You can only edit your own option sets');
+    }
+
     const fieldOption = await FieldOption.findByIdAndUpdate(
       id, 
       updateData, 
@@ -194,11 +218,15 @@ exports.deleteFieldOptionType = async (req, res) => {
   try {
     const { id } = req.params;
     
-    const fieldOption = await FieldOption.findByIdAndDelete(id);
+    const fieldOption = await FieldOption.findById(id);
     
     if (!fieldOption) {
       return notFoundResponse(res, 'Field option type not found');
     }
+    if (!canEditSet(fieldOption, req.user)) {
+      return forbiddenResponse(res, 'You can only delete your own option sets');
+    }
+    await fieldOption.deleteOne();
 
     await logAuditEvent(req, {
       action: 'FIELD_OPTION_TYPE_DELETED',
@@ -228,6 +256,9 @@ exports.addOption = async (req, res) => {
     const fieldOption = await FieldOption.findById(id);
     if (!fieldOption) {
       return notFoundResponse(res, 'Field option type not found');
+    }
+    if (!canEditSet(fieldOption, req.user)) {
+      return forbiddenResponse(res, 'You can only edit your own option sets');
     }
     
     // Check if option already exists
@@ -273,6 +304,9 @@ exports.updateOption = async (req, res) => {
     if (!fieldOption) {
       return notFoundResponse(res, 'Field option type not found');
     }
+    if (!canEditSet(fieldOption, req.user)) {
+      return forbiddenResponse(res, 'You can only edit your own option sets');
+    }
     
     const optionIndex = fieldOption.options.findIndex(opt => opt.value === optionValue);
     if (optionIndex === -1) {
@@ -310,6 +344,9 @@ exports.removeOption = async (req, res) => {
     const fieldOption = await FieldOption.findById(id);
     if (!fieldOption) {
       return notFoundResponse(res, 'Field option type not found');
+    }
+    if (!canEditSet(fieldOption, req.user)) {
+      return forbiddenResponse(res, 'You can only edit your own option sets');
     }
     
     const optionIndex = fieldOption.options.findIndex(opt => opt.value === optionValue);
@@ -359,6 +396,7 @@ exports.bulkCreateFieldOptionTypes = async (req, res) => {
           optionType: optionTypeData.optionType,
           options: optionTypeData.options,
           isActive: optionTypeData.isActive !== false,
+          ...stampOwner(req.user, false),
           metadata: optionTypeData.metadata || {}
         });
         
@@ -418,7 +456,7 @@ exports.getOptionsForSchema = async (req, res) => {
     
     const options = {};
     for (const optionType of optionTypes) {
-      const fieldOption = await FieldOption.findOne({ optionType, isActive: true });
+      const fieldOption = await findReadableSet(optionType, req.user);
       if (fieldOption) {
         options[optionType] = fieldOption.options;
       }
@@ -449,6 +487,7 @@ exports.importOptions = async (req, res) => {
             optionType,
             options: optionList,
             isActive: true,
+            ...stampOwner(req.user, false),
             metadata: {
               description: `Imported options for ${optionType}`,
               category: 'imported',
@@ -485,5 +524,95 @@ exports.importOptions = async (req, res) => {
     }, `${createdTypes.length} option types imported successfully`);
   } catch (error) {
     return errorResponse(res, error.message || 'Failed to import options', 500);
+  }
+};
+
+exports.getFieldOptionById = async (req, res) => {
+  try {
+    const fieldOption = await FieldOption.findById(req.params.id);
+    if (!fieldOption || fieldOption.isActive === false) {
+      return notFoundResponse(res, 'Option set not found');
+    }
+    const isOwner = fieldOption.ownerId && req.user?._id && String(fieldOption.ownerId) === String(req.user._id);
+    if (!fieldOption.isTemplate && !isOwner) {
+      return notFoundResponse(res, 'Option set not found');
+    }
+    return successResponse(res, {
+      optionType: fieldOption.optionType,
+      isTemplate: fieldOption.isTemplate,
+      options: fieldOption.options || [],
+      count: fieldOption.options?.length || 0
+    }, 'Options retrieved successfully');
+  } catch (error) {
+    return errorResponse(res, error.message || 'Failed to retrieve options', 500);
+  }
+};
+
+exports.copyFieldOption = async (req, res) => {
+  try {
+    const source = await FieldOption.findById(req.params.id);
+    if (!source) {
+      return notFoundResponse(res, 'Option set not found');
+    }
+    if (!source.isTemplate && !canEditSet(source, req.user)) {
+      return forbiddenResponse(res, 'You can only copy your own sets or a shared example');
+    }
+
+    const existing = await FieldOption.findOne({
+      optionType: source.optionType,
+      ownerId: req.userId,
+      isTemplate: { $ne: true }
+    });
+    if (existing) {
+      return conflictResponse(res, 'You already have an option set with this name');
+    }
+
+    const copy = new FieldOption({
+      optionType: source.optionType,
+      options: source.options,
+      isActive: true,
+      ...stampOwner(req.user, false),
+      metadata: source.metadata
+    });
+    await copy.save();
+    return createdResponse(res, copy, 'Option set copied to your lists');
+  } catch (error) {
+    return errorResponse(res, error.message || 'Failed to copy option set', 500);
+  }
+};
+
+exports.publishTemplate = async (req, res) => {
+  try {
+    if (!canShareTemplates(req.user)) {
+      return forbiddenResponse(res, 'Only an admin can publish an example list');
+    }
+
+    const source = await FieldOption.findById(req.params.id);
+    if (!source) {
+      return notFoundResponse(res, 'Option set not found');
+    }
+    if (source.isTemplate) {
+      return successResponse(res, source, 'This list is already an example');
+    }
+    if (!canEditSet(source, req.user)) {
+      return forbiddenResponse(res, 'You can only publish your own option sets');
+    }
+
+    const existing = await FieldOption.findOne({ optionType: source.optionType, isTemplate: true });
+    if (existing) {
+      return conflictResponse(res, 'An example with this name already exists');
+    }
+
+    const template = new FieldOption({
+      optionType: source.optionType,
+      options: source.options,
+      isActive: true,
+      ...stampOwner(req.user, true),
+      metadata: source.metadata
+    });
+    await template.save();
+    return createdResponse(res, template, 'Example published');
+  } catch (error) {
+    return errorResponse(res, error.message || 'Failed to publish example', 500);
   }
 }; 

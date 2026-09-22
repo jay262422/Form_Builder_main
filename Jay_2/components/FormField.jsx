@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import FieldRegistry from '../fieldTypes/FieldRegistry';
-import { getDynamicOptions } from '../utils/fieldHelpers';
+import { optionsFromSavedGetOptions } from '../utils/safeFieldOptions';
 import dynamicMappingsService from '../services/dynamicMappingsService';
 import fieldOptionsService from '../services/fieldOptionsService';
 import { builderThemeConfigs } from '../utils/themeConfigs';
@@ -98,7 +98,9 @@ export default function FormField({
 
       setLoadingOptions(true);
       try {
-        const options = await fieldOptionsService.getOptionType(field.optionType);
+        const options = field.optionSetId
+          ? await fieldOptionsService.getOptionSetById(field.optionSetId)
+          : await fieldOptionsService.getOptionType(field.optionType);
         setDynamicOptions(options);
       } catch (error) {
         console.error(`Error loading option type for ${field.name}:`, error);
@@ -109,7 +111,7 @@ export default function FormField({
     };
 
     loadOptionTypeOptions();
-  }, [field.optionType, field.dynamicMapping]);
+  }, [field.optionType, field.optionSetId, field.dynamicMapping]);
 
   // Get options for the field
   const options = useMemo(() => {
@@ -119,32 +121,14 @@ export default function FormField({
       return [];
     }
     
-    // Priority: 1. getOptions function (like engineering form), 2. Dynamic mapping options, 3. Option type options, 4. Static options
-    
-    // ✅ RECONSTRUCT getOptions from dynamicConfig if available
-    let getOptionsFunction = field.getOptions;
-    
-    // Handle case where getOptions is stored as a string (from JSON)
-    if (typeof getOptionsFunction === 'string') {
-      try {
-        // The string contains just the function body, so we need to wrap it
-        // Check if it already has a return statement
-        const trimmedFunction = getOptionsFunction.trim();
-        if (trimmedFunction.startsWith('return ')) {
-          getOptionsFunction = new Function('field', 'formData', getOptionsFunction);
-        } else if (trimmedFunction.includes('return ')) {
-          // Function has return statement but not at the beginning
-          getOptionsFunction = new Function('field', 'formData', getOptionsFunction);
-        } else {
-          // No return statement, add one
-          getOptionsFunction = new Function('field', 'formData', `return ${getOptionsFunction}`);
-        }
-      } catch (error) {
-        console.error('Error parsing getOptions function:', error);
-        getOptionsFunction = null;
-      }
+    // Saved choice lists are data, not scripts. Only the known parent/child map is read.
+    if (typeof field.getOptions === 'string') {
+      const savedOptions = optionsFromSavedGetOptions(field.getOptions, formData);
+      if (savedOptions) return savedOptions;
     }
-    
+
+    let getOptionsFunction = null;
+
     // If no getOptions function but has dynamicConfig (builder approach), reconstruct it
     if (!getOptionsFunction && field.dynamicConfig) {
       console.log(`🔍 FormField: Reconstructing getOptions from dynamicConfig for ${field.name}`);

@@ -143,6 +143,7 @@ class FieldOptionsService {
     return (data.optionTypes || []).map((item) => ({
       id: item._id,
       optionType: item.optionType,
+      isTemplate: Boolean(item.isTemplate),
       displayName: item.metadata?.displayName || item.optionType,
       description: item.metadata?.description || ''
     }));
@@ -152,10 +153,11 @@ class FieldOptionsService {
     const body = {
       optionType: optionSet.optionType,
       options: optionSet.options,
+      isTemplate: Boolean(optionSet.isTemplate),
       metadata: {
         displayName: optionSet.displayName,
         description: optionSet.description || '',
-        category: 'custom'
+        category: optionSet.isTemplate ? 'example' : 'custom'
       }
     };
     const url = optionSet.id
@@ -305,6 +307,41 @@ class FieldOptionsService {
   /**
    * Delete option type
    */
+  async getOptionSetById(id) {
+    try {
+      const url = SIMPLE_API_CONFIG.getEndpointURL('fieldOptions', 'getById', { id });
+      const response = await authenticatedFetch(url);
+      const data = await this.parseResponse(response);
+      return data.options || [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  async copyOptionSet(id) {
+    const url = SIMPLE_API_CONFIG.getEndpointURL('fieldOptions', 'copy', { id });
+    const response = await authenticatedFetch(url, { method: 'POST' });
+    const result = await this.parseResponse(response);
+    this.clearCache();
+    return result;
+  }
+
+  async publishOptionSet(id) {
+    const url = SIMPLE_API_CONFIG.getEndpointURL('fieldOptions', 'publish', { id });
+    const response = await authenticatedFetch(url, { method: 'POST' });
+    const result = await this.parseResponse(response);
+    this.clearCache();
+    return result;
+  }
+
+  async deleteOptionSet(id) {
+    const url = SIMPLE_API_CONFIG.getEndpointURL('fieldOptions', 'delete', { id });
+    const response = await authenticatedFetch(url, { method: 'DELETE' });
+    const result = await this.parseResponse(response);
+    this.clearCache();
+    return result;
+  }
+
   async deleteOptionType(optionType) {
     try {
       const optionTypeRecord = await this.findOptionTypeRecord(optionType);

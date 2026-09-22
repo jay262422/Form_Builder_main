@@ -242,6 +242,17 @@ export default function SettingsPage() {
     }
   };
 
+  const handleRevokeInvite = async (email) => {
+    clearFeedback();
+    try {
+      await workspaceService.revokeInvite(email);
+      await reloadWorkspace();
+      setMessage('Invitation cancelled.');
+    } catch (err) {
+      setError(err.message || 'Failed to cancel invitation');
+    }
+  };
+
   const handleRemoveMember = async (memberUserId) => {
     clearFeedback();
     try {
@@ -571,6 +582,14 @@ export default function SettingsPage() {
                       </td>
                       <td className="px-3 py-2 capitalize">{member.status}</td>
                       <td className="px-3 py-2 text-right">
+                        {canManageWorkspace && member.status === 'invited' && (
+                          <button
+                            onClick={() => handleRevokeInvite(member.email)}
+                            className={dangerButtonClassName}
+                          >
+                            Cancel invite
+                          </button>
+                        )}
                         {canManageWorkspace && member.status === 'active' && member.role !== 'owner' && member.userId && (
                           <button
                             onClick={() => handleRemoveMember(member.userId)}

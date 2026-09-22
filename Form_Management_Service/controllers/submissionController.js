@@ -1,6 +1,6 @@
 const Submission = require('../models/Submission');
 const Form = require('../models/Form');
-const { buildScopedFormQuery } = require('../utils/workspaceHelper');
+const { buildScopedFormQuery, userCanAccessForm } = require('../utils/workspaceHelper');
 const { parsePagination, buildPaginationMeta } = require('../utils/paginationHelper');
 const {
   validateSubmissionAgainstForm,
@@ -49,12 +49,7 @@ const getOwnedFormByCustomId = async (formId, reqUserId, reqWorkspaceId) => {
     return { form: null, error: { type: 'not_found' } };
   }
 
-  if (reqWorkspaceId && form.workspaceId && form.workspaceId.toString() !== reqWorkspaceId.toString()) {
-    return { form: null, error: { type: 'unauthorized' } };
-  }
-
-  // Fallback check for records without workspace assignment.
-  if (!form.workspaceId && reqUserId && form.userId && form.userId.toString() !== reqUserId.toString()) {
+  if (!userCanAccessForm(form, { _id: reqUserId, workspaceId: reqWorkspaceId })) {
     return { form: null, error: { type: 'unauthorized' } };
   }
 
@@ -76,19 +71,9 @@ const getOwnedSubmissionById = async (submissionId, reqUserId, reqWorkspaceId) =
   return { submission, form, error: null };
 };
 
-const hasOwnedFormAccess = (form, reqUserId, reqWorkspaceId) => {
-  if (!form) return false;
-
-  if (reqWorkspaceId && form.workspaceId) {
-    return form.workspaceId.toString() === reqWorkspaceId.toString();
-  }
-
-  if (!form.workspaceId && reqUserId && form.userId) {
-    return form.userId.toString() === reqUserId.toString();
-  }
-
-  return false;
-};
+const hasOwnedFormAccess = (form, reqUserId, reqWorkspaceId) => (
+  userCanAccessForm(form, { _id: reqUserId, workspaceId: reqWorkspaceId })
+);
 
 const normalizeForStorage = (value) => {
   if (value === null || value === undefined) {

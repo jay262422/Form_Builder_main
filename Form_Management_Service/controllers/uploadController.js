@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const Form = require('../models/Form');
+const { userCanAccessForm } = require('../utils/workspaceHelper');
 const { appConfig } = require('../config/appConfig');
 const {
   createdResponse,
@@ -32,42 +33,41 @@ const buildPublicUrl = (req, storageKey) => (
   `${req.protocol}://${req.get('host')}/uploads/${storageKey}`
 );
 
-const hasOwnedFormAccess = (form, reqUserId, reqWorkspaceId) => {
-  if (!form) return false;
+const hasOwnedFormAccess = (form, reqUserId, reqWorkspaceId) => (
+  userCanAccessForm(form, { _id: reqUserId, workspaceId: reqWorkspaceId })
+);
 
-  if (reqWorkspaceId && form.workspaceId) {
-    return form.workspaceId.toString() === reqWorkspaceId.toString();
-  }
-
-  if (!form.workspaceId && reqUserId && form.userId) {
-    return form.userId.toString() === reqUserId.toString();
-  }
-
-  return false;
+const EXTENSIONS_BY_MIME = {
+  'image/jpeg': ['.jpg', '.jpeg'],
+  'image/png': ['.png'],
+  'image/gif': ['.gif'],
+  'image/webp': ['.webp'],
+  'application/pdf': ['.pdf'],
+  'text/plain': ['.txt'],
+  'text/csv': ['.csv'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
 };
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const formId = sanitizePathSegment(req.params.formId || 'form');
-    const targetDirectory = path.join(uploadsRoot, 'forms', formId);
-    ensureDirectory(targetDirectory);
-    cb(null, targetDirectory);
-  },
-  filename: (req, file, cb) => {
-    const safeOriginalName = sanitizePathSegment(path.parse(file.originalname).name);
-    const extension = path.extname(file.originalname || '').toLowerCase();
-    const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    cb(null, `${uniqueSuffix}_${safeOriginalName}${extension}`);
-  }
-});
+const extensionForUpload = (file) => {
+  const allowedExtensions = EXTENSIONS_BY_MIME[file.mimetype] || [];
+  const originalExtension = path.extname(file.originalname || '').toLowerCase();
+  if (allowedExtensions.includes(originalExtension)) return originalExtension;
+  return '';
+};
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: appConfig.uploads.maxSizeMb * 1024 * 1024
   },
   fileFilter: (_req, file, cb) => {
-    if (appConfig.uploads.allowedMimeTypes.includes(file.mimetype)) {
+    const allowedExtensions = EXTENSIONS_BY_MIME[file.mimetype];
+    if (
+      allowedExtensions &&
+      appConfig.uploads.allowedMimeTypes.includes(file.mimetype) &&
+      extensionForUpload(file)
+    ) {
       return cb(null, true);
     }
     return cb(new Error(`File type not allowed: ${file.mimetype}`));
@@ -101,7 +101,18 @@ exports.uploadFile = async (req, res) => {
       return unauthorizedResponse(res, 'Authentication is required to submit this form');
     }
 
-    const storageKey = buildStorageKey(formId, req.file.filename);
+    const extension = extensionForUpload(req.file);
+    if (!extension) {
+      return validationError(res, 'File type not allowed');
+    }
+
+    const safeOriginalName = sanitizePathSegment(path.parse(req.file.originalname).name);
+    const filename = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safeOriginalName}${extension}`;
+    const formDirectory = path.join(uploadsRoot, 'forms', sanitizePathSegment(formId));
+    ensureDirectory(formDirectory);
+    fs.writeFileSync(path.join(formDirectory, filename), req.file.buffer);
+
+    const storageKey = buildStorageKey(formId, filename);
     const fileRecord = {
       name: req.file.originalname,
       originalName: req.file.originalname,

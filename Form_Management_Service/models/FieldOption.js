@@ -4,7 +4,22 @@ const fieldOptionSchema = new mongoose.Schema({
   optionType: { 
     type: String, 
     required: true,
-    trim: true,
+    trim: true
+  },
+  ownerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+    index: true
+  },
+  workspaceId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Workspace',
+    default: null
+  },
+  isTemplate: {
+    type: Boolean,
+    default: false,
     index: true
   },
   // Store all options for this type in a single array
@@ -47,28 +62,15 @@ const fieldOptionSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Compound indexes for efficient queries
 fieldOptionSchema.index({ optionType: 1, isActive: 1 });
-
-// Ensure unique optionType
-fieldOptionSchema.index({ optionType: 1 }, { unique: true });
-
-// Pre-save middleware to handle duplicates
-fieldOptionSchema.pre('save', function(next) {
-  if (this.isModified('optionType')) {
-    this.constructor.findOne({
-      optionType: this.optionType,
-      _id: { $ne: this._id }
-    }).then(existing => {
-      if (existing) {
-        return next(new Error(`Option type '${this.optionType}' already exists`));
-      }
-      next();
-    }).catch(next);
-  } else {
-    next();
-  }
-});
+fieldOptionSchema.index(
+  { ownerId: 1, optionType: 1 },
+  { unique: true, partialFilterExpression: { isTemplate: false, ownerId: { $type: 'objectId' } } }
+);
+fieldOptionSchema.index(
+  { optionType: 1 },
+  { unique: true, partialFilterExpression: { isTemplate: true } }
+);
 
 // Static method to get options by type
 fieldOptionSchema.statics.getOptionsByType = function(optionType, parentValue = null) {

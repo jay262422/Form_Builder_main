@@ -31,6 +31,10 @@ const workspaceMemberSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  inviteExpiresAt: {
+    type: Date,
+    default: null
+  },
   invitedAt: {
     type: Date,
     default: null

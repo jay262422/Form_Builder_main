@@ -1070,10 +1070,11 @@ return mappingData[parentValue] || [];`;
     onSchemaChange?.({ formType, formTheme, sections: preparedSchema });
   }, [schema, onSchemaChange, formType, formTheme, prepareSchemaForSave]);
 
-  const applyOptionSet = useCallback(async (sectionIndex, fieldIndex, optionType) => {
+  const applyOptionSet = useCallback(async (sectionIndex, fieldIndex, optionType, optionSetId) => {
     if (!optionType) {
       updateField(sectionIndex, fieldIndex, {
         optionType: undefined,
+        optionSetId: undefined,
         connectedToBackend: false,
         dynamicMapping: undefined,
         dependsOn: undefined
@@ -1081,9 +1082,12 @@ return mappingData[parentValue] || [];`;
       return;
     }
 
-    const options = await fieldOptionsService.getOptionType(optionType);
+    const options = optionSetId
+      ? await fieldOptionsService.getOptionSetById(optionSetId)
+      : await fieldOptionsService.getOptionType(optionType);
     updateField(sectionIndex, fieldIndex, {
       optionType,
+      optionSetId,
       connectedToBackend: true,
       dynamicMapping: undefined,
       dependsOn: undefined,
@@ -2193,14 +2197,22 @@ return mappingData[parentValue] || [];`;
       <div className="rounded-lg border border-gray-200 p-3">
         <label className="mb-1 block text-xs font-medium text-gray-700">Option set</label>
         <select
-          value={field.optionType || activeLink?.childOptionType || ''}
-          onChange={(event) => applyOptionSet(sectionIndex, fieldIndex, event.target.value)}
+          value={
+            field.optionSetId
+            || optionSets.find((optionSet) => !optionSet.isTemplate && optionSet.optionType === field.optionType)?.id
+            || optionSets.find((optionSet) => optionSet.optionType === (field.optionType || activeLink?.childOptionType))?.id
+            || ''
+          }
+          onChange={(event) => {
+            const selected = optionSets.find((optionSet) => optionSet.id === event.target.value);
+            applyOptionSet(sectionIndex, fieldIndex, selected?.optionType || '', selected?.id);
+          }}
           className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
         >
           <option value="">Custom options for this field</option>
           {optionSets.map((optionSet) => (
-            <option key={optionSet.optionType} value={optionSet.optionType}>
-              {optionSet.displayName}
+            <option key={optionSet.id || optionSet.optionType} value={optionSet.id}>
+              {optionSet.isTemplate ? `${optionSet.displayName} (example)` : optionSet.displayName}
             </option>
           ))}
         </select>

@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const submissionController = require('../controllers/submissionController');
 const validate = require('../middleware/validate');
-const { authenticate, optionalAuth } = require('../middleware/auth');
+const { authenticate, optionalAuth, authorizeWorkspace } = require('../middleware/auth');
+const { WORKSPACE_MUTATION_ROLES } = require('../utils/workspaceHelper');
 const {
   submissionListQuerySchema,
   createSubmissionSchema,
@@ -18,7 +19,7 @@ router.get('/form/:formId/export', authenticate, validate(formIdParamSchema, 'pa
 router.get('/', authenticate, validate(submissionListQuerySchema, 'query'), submissionController.getAllSubmissions);
 router.get('/:id', authenticate, validate(submissionIdParamSchema, 'params'), submissionController.getSubmissionById);
 router.post('/', optionalAuth, validate(createSubmissionSchema), submissionController.createSubmission);
-router.put('/:id', authenticate, validate(submissionIdParamSchema, 'params'), validate(updateSubmissionSchema), submissionController.updateSubmission);
-router.delete('/:id', authenticate, validate(submissionIdParamSchema, 'params'), submissionController.deleteSubmission);
+router.put('/:id', authenticate, authorizeWorkspace(...WORKSPACE_MUTATION_ROLES), validate(submissionIdParamSchema, 'params'), validate(updateSubmissionSchema), submissionController.updateSubmission);
+router.delete('/:id', authenticate, authorizeWorkspace(...WORKSPACE_MUTATION_ROLES), validate(submissionIdParamSchema, 'params'), submissionController.deleteSubmission);
 
 module.exports = router;

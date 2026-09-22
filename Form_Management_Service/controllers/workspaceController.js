@@ -14,8 +14,31 @@ const {
   updateUserWorkspaceContext
 } = require('../utils/workspaceHelper');
 const { logAuditEvent } = require('../utils/auditLogger');
+const { hashToken } = require('../services/tokenService');
+
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const canManageWorkspace = (user) => WORKSPACE_ADMIN_ROLES.includes(user.workspaceRole || 'viewer');
+
+const isWorkspaceOwner = (user) => user?.workspaceRole === 'owner';
+
+const toPublicWorkspace = (workspace) => {
+  const plain = typeof workspace.toObject === 'function' ? workspace.toObject() : { ...workspace };
+  plain.members = (plain.members || []).map((member) => {
+    const nextMember = { ...member };
+    delete nextMember.inviteToken;
+    return nextMember;
+  });
+  return plain;
+};
+
+const inviteIsExpired = (invitation) => {
+  if (invitation.inviteExpiresAt) {
+    return new Date(invitation.inviteExpiresAt).getTime() <= Date.now();
+  }
+  if (!invitation.invitedAt) return true;
+  return new Date(invitation.invitedAt).getTime() + INVITE_TTL_MS <= Date.now();
+};
 
 const loadWorkspaceForUser = async (userId) => {
   const user = await User.findById(userId);
@@ -32,7 +55,7 @@ exports.getMyWorkspace = async (req, res) => {
       return notFoundResponse(res, 'Workspace not found');
     }
 
-    return successResponse(res, { workspace }, 'Workspace retrieved successfully');
+    return successResponse(res, { workspace: toPublicWorkspace(workspace) }, 'Workspace retrieved successfully');
   } catch (error) {
     return errorResponse(res, error.message || 'Failed to retrieve workspace', 500);
   }
@@ -66,7 +89,7 @@ exports.updateMyWorkspace = async (req, res) => {
       }
     });
 
-    return successResponse(res, { workspace }, 'Workspace updated successfully');
+    return successResponse(res, { workspace: toPublicWorkspace(workspace) }, 'Workspace updated successfully');
   } catch (error) {
     return errorResponse(res, error.message || 'Failed to update workspace', 500);
   }
@@ -89,6 +112,10 @@ exports.inviteMember = async (req, res) => {
       return validationError(res, 'Role must be one of admin, editor, or viewer');
     }
 
+    if (role === 'admin' && !isWorkspaceOwner(req.user)) {
+      return errorResponse(res, 'Only the workspace owner can invite admins', 403, 'forbidden');
+    }
+
     const workspace = await loadWorkspaceForUser(req.userId);
     if (!workspace) {
       return notFoundResponse(res, 'Workspace not found');
@@ -100,13 +127,15 @@ exports.inviteMember = async (req, res) => {
     }
 
     const inviteToken = generateInviteToken();
+    const inviteExpiresAt = new Date(Date.now() + INVITE_TTL_MS);
     workspace.members.push({
       userId: null,
       email: normalizedEmail,
       name: '',
       role,
       status: 'invited',
-      inviteToken,
+      inviteToken: hashToken(inviteToken),
+      inviteExpiresAt,
       invitedAt: new Date(),
       invitedBy: req.userId
     });
@@ -128,7 +157,8 @@ exports.inviteMember = async (req, res) => {
       invite: {
         email: normalizedEmail,
         role,
-        inviteToken
+        inviteToken,
+        expiresAt: inviteExpiresAt
       }
     }, 'Member invited successfully');
   } catch (error) {
@@ -148,29 +178,52 @@ exports.acceptInvitation = async (req, res) => {
       return notFoundResponse(res, 'User not found');
     }
 
-    const workspace = await Workspace.findOne({ 'members.inviteToken': inviteToken });
+    const tokenHash = hashToken(inviteToken);
+    const workspace = await Workspace.findOne({
+      $or: [
+        { 'members.inviteToken': tokenHash },
+        { 'members.inviteToken': inviteToken }
+      ]
+    });
     if (!workspace) {
       return notFoundResponse(res, 'Invitation not found or expired');
     }
 
-    const memberIndex = workspace.members.findIndex(member => member.inviteToken === inviteToken);
+    const memberIndex = workspace.members.findIndex(
+      (member) => member.inviteToken === tokenHash || member.inviteToken === inviteToken
+    );
     if (memberIndex === -1) {
       return notFoundResponse(res, 'Invitation not found or expired');
     }
 
     const invitation = workspace.members[memberIndex];
+    if (invitation.status !== 'invited') {
+      return notFoundResponse(res, 'Invitation not found or expired');
+    }
+
+    if (inviteIsExpired(invitation)) {
+      return errorResponse(res, 'Invitation has expired', 400, 'invalid_token');
+    }
+
     if (invitation.email !== currentUser.email.toLowerCase()) {
       return errorResponse(res, 'Invitation email does not match your account', 403, 'forbidden');
     }
 
-    workspace.members[memberIndex] = {
-      ...workspace.members[memberIndex],
-      userId: currentUser._id,
-      name: currentUser.name,
-      status: 'active',
-      inviteToken: null,
-      joinedAt: new Date()
-    };
+    if (
+      currentUser.workspaceId &&
+      currentUser.workspaceId.toString() !== workspace._id.toString() &&
+      !currentUser.homeWorkspaceId
+    ) {
+      currentUser.homeWorkspaceId = currentUser.workspaceId;
+      await currentUser.save();
+    }
+
+    invitation.userId = currentUser._id;
+    invitation.name = currentUser.name;
+    invitation.status = 'active';
+    invitation.inviteToken = null;
+    invitation.inviteExpiresAt = null;
+    invitation.joinedAt = new Date();
 
     await workspace.save();
     await updateUserWorkspaceContext(currentUser._id, workspace._id, invitation.role);
@@ -186,7 +239,7 @@ exports.acceptInvitation = async (req, res) => {
       }
     });
 
-    return successResponse(res, { workspace }, 'Invitation accepted successfully');
+    return successResponse(res, { workspace: toPublicWorkspace(workspace) }, 'Invitation accepted successfully');
   } catch (error) {
     return errorResponse(res, error.message || 'Failed to accept invitation', 500);
   }
@@ -219,6 +272,10 @@ exports.updateMemberRole = async (req, res) => {
       return errorResponse(res, 'Cannot change owner role', 400, 'invalid_operation');
     }
 
+    if ((member.role === 'admin' || role === 'admin') && !isWorkspaceOwner(req.user)) {
+      return errorResponse(res, 'Only the workspace owner can change admin roles', 403, 'forbidden');
+    }
+
     const previousRole = member.role;
     member.role = role;
     await workspace.save();
@@ -235,7 +292,7 @@ exports.updateMemberRole = async (req, res) => {
       }
     });
 
-    return successResponse(res, { workspace }, 'Member role updated successfully');
+    return successResponse(res, { workspace: toPublicWorkspace(workspace) }, 'Member role updated successfully');
   } catch (error) {
     return errorResponse(res, error.message || 'Failed to update member role', 500);
   }
@@ -262,6 +319,10 @@ exports.removeMember = async (req, res) => {
       return errorResponse(res, 'Cannot remove workspace owner', 400, 'invalid_operation');
     }
 
+    if (member.role === 'admin' && !isWorkspaceOwner(req.user)) {
+      return errorResponse(res, 'Only the workspace owner can remove an admin', 403, 'forbidden');
+    }
+
     const removedMember = {
       userId: member.userId?.toString() || '',
       email: member.email,
@@ -270,7 +331,24 @@ exports.removeMember = async (req, res) => {
 
     workspace.members = workspace.members.filter(m => !(m.userId && m.userId.toString() === userId));
     await workspace.save();
-    await updateUserWorkspaceContext(userId, null, 'viewer');
+
+    const removedUser = await User.findById(userId);
+    let restoreWorkspaceId = null;
+    let restoreRole = 'viewer';
+    if (
+      removedUser?.homeWorkspaceId &&
+      removedUser.homeWorkspaceId.toString() !== workspace._id.toString()
+    ) {
+      const homeWorkspace = await Workspace.findById(removedUser.homeWorkspaceId);
+      const homeMember = homeWorkspace?.members?.find(
+        (home) => home.userId && home.userId.toString() === userId && home.status === 'active'
+      );
+      if (homeWorkspace && homeMember) {
+        restoreWorkspaceId = homeWorkspace._id;
+        restoreRole = homeMember.role;
+      }
+    }
+    await updateUserWorkspaceContext(userId, restoreWorkspaceId, restoreRole);
 
     await logAuditEvent(req, {
       action: 'WORKSPACE_MEMBER_REMOVED',
@@ -282,8 +360,54 @@ exports.removeMember = async (req, res) => {
       }
     });
 
-    return successResponse(res, { workspace }, 'Member removed successfully');
+    return successResponse(res, { workspace: toPublicWorkspace(workspace) }, 'Member removed successfully');
   } catch (error) {
     return errorResponse(res, error.message || 'Failed to remove member', 500);
+  }
+};
+
+exports.revokeInvitation = async (req, res) => {
+  try {
+    if (!canManageWorkspace(req.user)) {
+      return errorResponse(res, 'Only workspace admins can revoke invitations', 403, 'forbidden');
+    }
+
+    const email = String(req.params.email || '').toLowerCase().trim();
+    if (!email) {
+      return validationError(res, 'Email is required');
+    }
+
+    const workspace = await loadWorkspaceForUser(req.userId);
+    if (!workspace) {
+      return notFoundResponse(res, 'Workspace not found');
+    }
+
+    const invitation = workspace.members.find((member) => member.email === email && member.status === 'invited');
+    if (!invitation) {
+      return notFoundResponse(res, 'Invitation not found');
+    }
+
+    if (invitation.role === 'admin' && !isWorkspaceOwner(req.user)) {
+      return errorResponse(res, 'Only the workspace owner can revoke an admin invitation', 403, 'forbidden');
+    }
+
+    workspace.members = workspace.members.filter(
+      (member) => !(member.email === email && member.status === 'invited')
+    );
+    await workspace.save();
+
+    await logAuditEvent(req, {
+      action: 'WORKSPACE_INVITATION_REVOKED',
+      entityType: 'workspace_member',
+      entityId: email,
+      metadata: {
+        workspaceId: workspace._id.toString(),
+        invitedEmail: email
+      }
+    });
+
+    return successResponse(res, { workspace: toPublicWorkspace(workspace) }, 'Invitation revoked');
+  } catch (error) {
+    return errorResponse(res, error.message || 'Failed to revoke invitation', 500);
   }
 };

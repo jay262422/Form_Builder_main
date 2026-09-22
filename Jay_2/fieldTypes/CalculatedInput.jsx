@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { evaluateSafeFormula } from '../utils/safeFormula';
 
 /**
  * CalculatedInput - Calculated field component
@@ -35,7 +36,7 @@ export default function CalculatedInput({
   useEffect(() => {
     if (field.formula && field.dependsOn) {
       try {
-        const result = executeCalculation(field.formula, formData, field.dependsOn);
+        const result = evaluateSafeFormula(field.formula, formData);
         setCalculatedValue(result);
         setCalculationError(null);
         
@@ -49,45 +50,6 @@ export default function CalculatedInput({
       }
     }
   }, [field.formula, field.dependsOn, formDataKey, value]); // Use stable formDataKey instead of formData
-
-  const executeCalculation = (formula, formData, dependencies) => {
-    // Security check - prevent dangerous operations
-    const dangerousPatterns = [
-      /eval\s*\(/,
-      /Function\s*\(/,
-      /setTimeout\s*\(/,
-      /setInterval\s*\(/,
-      /document\./,
-      /window\./,
-      /localStorage\./,
-      /sessionStorage\./,
-      /fetch\s*\(/,
-      /XMLHttpRequest/,
-      /import\s+/,
-      /require\s*\(/
-    ];
-
-    for (const pattern of dangerousPatterns) {
-      if (pattern.test(formula)) {
-        throw new Error('Dangerous operation detected');
-      }
-    }
-
-    // Create safe calculation function
-    const normalizedFormula = formula.includes('return')
-      ? formula
-      : `return (${formula});`;
-
-    const calculationFunction = new Function('formData', 'dependencies', `
-      try {
-        ${normalizedFormula}
-      } catch (error) {
-        throw new Error('Calculation failed: ' + error.message);
-      }
-    `);
-
-    return calculationFunction(formData, dependencies);
-  };
 
   const displayValue = calculatedValue === '' || calculatedValue === null || calculatedValue === undefined
     ? ''

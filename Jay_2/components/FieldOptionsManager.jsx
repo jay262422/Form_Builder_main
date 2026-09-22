@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import fieldOptionsService from '../services/fieldOptionsService';
+import authService from '../services/authService';
 
 const toOptionKey = (name) => {
   const key = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -13,8 +14,27 @@ const emptyDraft = () => ({
   optionType: '',
   displayName: '',
   description: '',
-  options: [{ label: '', value: '' }]
+  isTemplate: false,
+  options: [{ label: '', value: '' }],
+  importText: ''
 });
+
+const parseChoiceList = (text) => text
+  .split(/\r?\n/)
+  .map((line) => line.trim())
+  .filter(Boolean)
+  .map((line) => {
+    const [label, rawValue] = line.split(/[,|\t]/).map((part) => part.trim());
+    return {
+      label,
+      value: rawValue || toValue(label)
+    };
+  })
+  .filter((option) => option.label && option.value);
+
+const canShareExamples = (user) => (
+  user?.role === 'admin' || user?.workspaceRole === 'owner' || user?.workspaceRole === 'admin'
+);
 
 export default function FieldOptionsManager() {
   const [sets, setSets] = useState([]);
@@ -22,6 +42,11 @@ export default function FieldOptionsManager() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [canShare] = useState(() => canShareExamples(authService.getUser()));
+  const mySets = useMemo(() => sets.filter((optionSet) => !optionSet.isTemplate), [sets]);
+  const examples = useMemo(() => sets.filter((optionSet) => optionSet.isTemplate), [sets]);
+  const draftIsExample = Boolean(draft?.isTemplate);
+  const draftLocked = draftIsExample && !canShare;
 
   const loadSets = async () => {
     setLoading(true);
@@ -106,7 +131,7 @@ export default function FieldOptionsManager() {
     }
     setError('');
     try {
-      await fieldOptionsService.deleteOptionType(optionSet.optionType);
+      await fieldOptionsService.deleteOptionSet(optionSet.id);
       if (draft?.id === optionSet.id) setDraft(null);
       await loadSets();
     } catch (err) {
@@ -120,7 +145,7 @@ export default function FieldOptionsManager() {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Field options</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Create a set of choices once, then reuse it on dropdowns, radio groups, and multi-selects.
+            Your lists belong to you. Examples are common lists you can copy. Paste a list when you already have the choices.
           </p>
         </div>
         <button
@@ -138,27 +163,26 @@ export default function FieldOptionsManager() {
 
       <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="rounded-xl border border-gray-200 bg-white p-3">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Saved sets</div>
           {loading ? (
             <p className="px-2 py-6 text-sm text-gray-500">Loading option sets…</p>
-          ) : sets.length === 0 ? (
-            <p className="px-2 py-6 text-sm text-gray-500">No option sets yet. Create one for countries, departments, or any list you reuse.</p>
           ) : (
-            <div className="space-y-1">
-              {sets.map((optionSet) => (
-                <button
-                  key={optionSet.id || optionSet.optionType}
-                  type="button"
-                  onClick={() => openSet(optionSet)}
-                  className={`w-full rounded-lg px-3 py-2 text-left text-sm ${
-                    draft?.optionType === optionSet.optionType
-                      ? 'bg-blue-50 font-medium text-blue-800'
-                      : 'text-gray-800 hover:bg-gray-50'
-                  }`}
-                >
-                  {optionSet.displayName}
-                </button>
-              ))}
+            <div className="space-y-4">
+              <div>
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">My sets</div>
+                {mySets.length === 0 ? (
+                  <p className="px-2 text-sm text-gray-500">No lists yet. Create one, copy an example, or paste a list.</p>
+                ) : mySets.map((optionSet) => (
+                  <SetButton key={optionSet.id || optionSet.optionType} optionSet={optionSet} draft={draft} onOpen={openSet} />
+                ))}
+              </div>
+              <div>
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Examples</div>
+                {examples.length === 0 ? (
+                  <p className="px-2 text-sm text-gray-500">No shared examples yet.</p>
+                ) : examples.map((optionSet) => (
+                  <SetButton key={optionSet.id || optionSet.optionType} optionSet={optionSet} draft={draft} onOpen={openSet} />
+                ))}
+              </div>
             </div>
           )}
         </aside>
@@ -176,6 +200,7 @@ export default function FieldOptionsManager() {
                   <label className="mb-1 block text-sm font-medium text-gray-700">Name</label>
                   <input
                     value={draft.displayName}
+                    readOnly={draftLocked}
                     onChange={(event) => {
                       const displayName = event.target.value;
                       setDraft((current) => ({ ...current, displayName }));
@@ -188,6 +213,7 @@ export default function FieldOptionsManager() {
                   <label className="mb-1 block text-sm font-medium text-gray-700">Description</label>
                   <input
                     value={draft.description}
+                    readOnly={draftLocked}
                     onChange={(event) => {
                       const description = event.target.value;
                       setDraft((current) => ({ ...current, description }));
@@ -198,6 +224,44 @@ export default function FieldOptionsManager() {
                 </div>
               </div>
 
+              {!draftLocked && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Paste a list</label>
+                  <textarea
+                    value={draft.importText || ''}
+                    onChange={(event) => {
+                      const importText = event.target.value;
+                      setDraft((current) => ({ ...current, importText }));
+                    }}
+                    rows={4}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    placeholder={'One choice per line\nOr Label, value'}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const imported = parseChoiceList(draft.importText || '');
+                      if (!imported.length) {
+                        setError('Paste at least one choice, one per line.');
+                        return;
+                      }
+                      setError('');
+                      setDraft((current) => ({
+                        ...current,
+                        importText: '',
+                        options: [
+                          ...current.options.filter((option) => option.label.trim() || option.value.trim()),
+                          ...imported
+                        ]
+                      }));
+                    }}
+                    className="mt-2 text-sm font-medium text-blue-700 hover:text-blue-800"
+                  >
+                    Add these choices
+                  </button>
+                </div>
+              )}
+
               <div>
                 <div className="mb-2 text-sm font-medium text-gray-700">Choices</div>
                 <div className="space-y-2">
@@ -205,46 +269,93 @@ export default function FieldOptionsManager() {
                     <div key={`${draft.optionType}-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
                       <input
                         value={option.label}
+                        readOnly={draftLocked}
                         onChange={(event) => updateOption(index, { label: event.target.value })}
                         className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
                         placeholder="Label"
                       />
                       <input
                         value={option.value}
+                        readOnly={draftLocked}
                         onChange={(event) => updateOption(index, { value: event.target.value })}
                         className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
                         placeholder="Value"
                       />
-                      <button
-                        type="button"
-                        onClick={() => setDraft((current) => ({
-                          ...current,
-                          options: current.options.filter((_, optionIndex) => optionIndex !== index)
-                        }))}
-                        className="rounded-lg px-3 text-sm text-red-600 hover:bg-red-50"
-                      >
-                        Remove
-                      </button>
+                      {!draftLocked && (
+                        <button
+                          type="button"
+                          onClick={() => setDraft((current) => ({
+                            ...current,
+                            options: current.options.filter((_, optionIndex) => optionIndex !== index)
+                          }))}
+                          className="rounded-lg px-3 text-sm text-red-600 hover:bg-red-50"
+                        >
+                          Remove
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setDraft((current) => ({ ...current, options: [...current.options, { label: '', value: '' }] }))}
-                  className="mt-3 text-sm font-medium text-blue-700 hover:text-blue-800"
-                >
-                  Add choice
-                </button>
+                {!draftLocked && (
+                  <button
+                    type="button"
+                    onClick={() => setDraft((current) => ({ ...current, options: [...current.options, { label: '', value: '' }] }))}
+                    className="mt-3 text-sm font-medium text-blue-700 hover:text-blue-800"
+                  >
+                    Add choice
+                  </button>
+                )}
               </div>
 
               <div className="flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4">
-                {draft.id && (
+                {draft.id && !draftLocked && (
                   <button
                     type="button"
                     onClick={() => deleteSet(draft)}
                     className="mr-auto rounded-lg px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
                   >
                     Delete set
+                  </button>
+                )}
+                {draft.id && draftIsExample && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setSaving(true);
+                      setError('');
+                      try {
+                        await fieldOptionsService.copyOptionSet(draft.id);
+                        await loadSets();
+                        setDraft(null);
+                      } catch (err) {
+                        setError(err.message || 'Could not copy this example');
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                    className="rounded-lg border border-blue-200 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50"
+                  >
+                    Copy to my sets
+                  </button>
+                )}
+                {draft.id && !draftIsExample && canShare && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setSaving(true);
+                      setError('');
+                      try {
+                        await fieldOptionsService.publishOptionSet(draft.id);
+                        await loadSets();
+                      } catch (err) {
+                        setError(err.message || 'Could not publish this example');
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Publish as example
                   </button>
                 )}
                 <button
@@ -257,7 +368,7 @@ export default function FieldOptionsManager() {
                 <button
                   type="button"
                   onClick={saveDraft}
-                  disabled={saving}
+                  disabled={saving || draftLocked}
                   className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                 >
                   {saving ? 'Saving…' : 'Save set'}
@@ -268,5 +379,20 @@ export default function FieldOptionsManager() {
         </section>
       </div>
     </div>
+  );
+}
+
+function SetButton({ optionSet, draft, onOpen }) {
+  const selected = draft?.id ? draft.id === optionSet.id : draft?.optionType === optionSet.optionType;
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(optionSet)}
+      className={`mb-1 w-full rounded-lg px-3 py-2 text-left text-sm ${
+        selected ? 'bg-blue-50 font-medium text-blue-800' : 'text-gray-800 hover:bg-gray-50'
+      }`}
+    >
+      {optionSet.displayName}
+    </button>
   );
 }

@@ -15,13 +15,13 @@ exports.getMyWorkspaceAuditLogs = async (req, res) => {
 
     if (req.user?.workspaceId) {
       query.workspaceId = req.user.workspaceId;
+      if (userId) query.userId = userId;
     } else if (req.userId) {
       query.userId = req.userId;
     }
 
     if (action) query.action = action;
     if (entityType) query.entityType = entityType;
-    if (userId) query.userId = userId;
     if (entityId) query.entityId = entityId;
 
     const [logs, total] = await Promise.all([

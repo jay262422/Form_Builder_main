@@ -22,6 +22,15 @@ const sanitizeValue = (value) => {
 
   if (typeof value === 'object') {
     return Object.entries(value).reduce((acc, [key, nestedValue]) => {
+      if (
+        key.startsWith('$') ||
+        key.includes('.') ||
+        key === '__proto__' ||
+        key === 'constructor' ||
+        key === 'prototype'
+      ) {
+        return acc;
+      }
       acc[key] = sanitizeValue(nestedValue);
       return acc;
     }, {});

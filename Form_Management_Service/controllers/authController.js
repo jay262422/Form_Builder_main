@@ -46,7 +46,7 @@ exports.register = async (req, res) => {
       email,
       password,
       name,
-      emailVerificationToken: verificationToken
+      emailVerificationToken: hashToken(verificationToken)
     });
 
     await user.save();
@@ -250,7 +250,7 @@ exports.forgotPassword = async (req, res) => {
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
-    user.passwordResetToken = resetToken;
+    user.passwordResetToken = hashToken(resetToken);
     user.passwordResetExpires = new Date(Date.now() + 3600000);
     await user.save();
 
@@ -273,9 +273,13 @@ exports.resetPassword = async (req, res) => {
   try {
     const { token, newPassword } = req.body;
 
+    const tokenHash = hashToken(token);
     const user = await User.findOne({
-      passwordResetToken: token,
-      passwordResetExpires: { $gt: Date.now() }
+      passwordResetExpires: { $gt: Date.now() },
+      $or: [
+        { passwordResetToken: tokenHash },
+        { passwordResetToken: token }
+      ]
     }).select('+password');
 
     if (!user) {
@@ -298,7 +302,13 @@ exports.verifyEmail = async (req, res) => {
   try {
     const { token } = req.body;
 
-    const user = await User.findOne({ emailVerificationToken: token });
+    const tokenHash = hashToken(token);
+    const user = await User.findOne({
+      $or: [
+        { emailVerificationToken: tokenHash },
+        { emailVerificationToken: token }
+      ]
+    });
     if (!user) {
       return errorResponse(res, 'Email verification token is invalid', 400, 'invalid_token');
     }
@@ -326,7 +336,7 @@ exports.resendVerification = async (req, res) => {
     }
 
     const verificationToken = crypto.randomBytes(32).toString('hex');
-    user.emailVerificationToken = verificationToken;
+    user.emailVerificationToken = hashToken(verificationToken);
     await user.save();
 
     await sendVerificationEmail({ to: user.email, name: user.name, token: verificationToken });

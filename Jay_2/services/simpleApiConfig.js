@@ -38,6 +38,9 @@ const SIMPLE_API_CONFIG = {
       getAll: '/api/field-options',
       getTypes: '/api/field-options/types',
       getByType: '/api/field-options/type/:optionType',
+      getById: '/api/field-options/:id',
+      copy: '/api/field-options/:id/copy',
+      publish: '/api/field-options/:id/publish',
       create: '/api/field-options',
       update: '/api/field-options/:id',
       delete: '/api/field-options/:id',
@@ -83,7 +86,8 @@ const SIMPLE_API_CONFIG = {
       invite: '/api/workspaces/me/invite',
       acceptInvite: '/api/workspaces/invitations/accept',
       updateMemberRole: '/api/workspaces/me/members/:userId/role',
-      removeMember: '/api/workspaces/me/members/:userId'
+      removeMember: '/api/workspaces/me/members/:userId',
+      revokeInvite: '/api/workspaces/me/invitations/:email'
     },
     auditLogs: {
       getMine: '/api/audit-logs/me'

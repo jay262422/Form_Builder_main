@@ -13,7 +13,7 @@ const userSchema = new mongoose.Schema({
   password: {
     type: String,
     required: true,
-    minlength: 6,
+    minlength: 8,
     select: false // Don't return password by default
   },
   name: {
@@ -107,6 +107,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['owner', 'admin', 'editor', 'viewer'],
     default: 'owner'
+  },
+  homeWorkspaceId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Workspace',
+    default: null
   },
   isActive: {
     type: Boolean,

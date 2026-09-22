@@ -104,19 +104,6 @@ class ValidationService {
       }
     }
 
-    // Custom validation function
-    if (validation.customValidation) {
-      try {
-        const isValid = this.executeCustomValidation(value, validation.customValidation, formData);
-        if (!isValid) {
-          errors.push(validation.customMessage || 'Custom validation failed');
-        }
-      } catch (error) {
-        console.error('Custom validation error:', error);
-        errors.push('Custom validation error');
-      }
-    }
-
     return {
       isValid: errors.length === 0,
       errors
@@ -130,40 +117,8 @@ class ValidationService {
    * @param {object} formData - Complete form data
    * @returns {boolean} - Validation result
    */
-  executeCustomValidation(value, customFunction, formData) {
-    try {
-      // Create a safe execution environment
-      const functionBody = customFunction.trim();
-      
-      // Basic security check - prevent dangerous operations
-      const dangerousPatterns = [
-        /eval\s*\(/,
-        /Function\s*\(/,
-        /setTimeout\s*\(/,
-        /setInterval\s*\(/,
-        /document\./,
-        /window\./,
-        /localStorage\./,
-        /sessionStorage\./,
-        /fetch\s*\(/,
-        /XMLHttpRequest/,
-        /import\s+/,
-        /require\s*\(/
-      ];
-
-      for (const pattern of dangerousPatterns) {
-        if (pattern.test(functionBody)) {
-          throw new Error('Dangerous operation detected');
-        }
-      }
-
-      // Create function with limited scope
-      const validationFunction = new Function('value', 'formData', functionBody);
-      return validationFunction(value, formData);
-    } catch (error) {
-      console.error('Custom validation execution error:', error);
-      return false;
-    }
+  executeCustomValidation() {
+    return true;
   }
 
   /**

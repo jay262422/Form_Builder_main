@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const fieldOptionsController = require('../controllers/fieldOptionsController');
 const { authenticate, optionalAuth, authorizeWorkspace } = require('../middleware/auth');
-const { WORKSPACE_ADMIN_ROLES } = require('../utils/workspaceHelper');
+const { WORKSPACE_MUTATION_ROLES } = require('../utils/workspaceHelper');
 
 // Public routes (read-only)
 // GET /api/field-options - Get all field option types
@@ -22,7 +22,7 @@ router.post('/schema', optionalAuth, fieldOptionsController.getOptionsForSchema)
 router.post(
   '/',
   authenticate,
-  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  authorizeWorkspace(...WORKSPACE_MUTATION_ROLES),
   fieldOptionsController.createFieldOptionType
 );
 
@@ -30,7 +30,7 @@ router.post(
 router.put(
   '/:id',
   authenticate,
-  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  authorizeWorkspace(...WORKSPACE_MUTATION_ROLES),
   fieldOptionsController.updateFieldOptionType
 );
 
@@ -38,15 +38,29 @@ router.put(
 router.delete(
   '/:id',
   authenticate,
-  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  authorizeWorkspace(...WORKSPACE_MUTATION_ROLES),
   fieldOptionsController.deleteFieldOptionType
 );
 
 // POST /api/field-options/:id/options - Add option to existing type
 router.post(
+  '/:id/copy',
+  authenticate,
+  authorizeWorkspace(...WORKSPACE_MUTATION_ROLES),
+  fieldOptionsController.copyFieldOption
+);
+
+router.post(
+  '/:id/publish',
+  authenticate,
+  authorizeWorkspace(...WORKSPACE_MUTATION_ROLES),
+  fieldOptionsController.publishTemplate
+);
+
+router.post(
   '/:id/options',
   authenticate,
-  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  authorizeWorkspace(...WORKSPACE_MUTATION_ROLES),
   fieldOptionsController.addOption
 );
 
@@ -54,7 +68,7 @@ router.post(
 router.put(
   '/:id/options/:optionValue',
   authenticate,
-  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  authorizeWorkspace(...WORKSPACE_MUTATION_ROLES),
   fieldOptionsController.updateOption
 );
 
@@ -62,7 +76,7 @@ router.put(
 router.delete(
   '/:id/options/:optionValue',
   authenticate,
-  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  authorizeWorkspace(...WORKSPACE_MUTATION_ROLES),
   fieldOptionsController.removeOption
 );
 
@@ -70,15 +84,17 @@ router.delete(
 router.post(
   '/bulk',
   authenticate,
-  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  authorizeWorkspace(...WORKSPACE_MUTATION_ROLES),
   fieldOptionsController.bulkCreateFieldOptionTypes
 );
+
+router.get('/:id', optionalAuth, fieldOptionsController.getFieldOptionById);
 
 // POST /api/field-options/import - Import options from JSON
 router.post(
   '/import',
   authenticate,
-  authorizeWorkspace(...WORKSPACE_ADMIN_ROLES),
+  authorizeWorkspace(...WORKSPACE_MUTATION_ROLES),
   fieldOptionsController.importOptions
 );
 
